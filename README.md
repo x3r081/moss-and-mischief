@@ -4,7 +4,9 @@ An original single-player 3D island adventure. Build a homestead, tend a garden,
 
 ## Play
 
-Use WASD or arrow keys to walk, Shift to run, Space to hop, and E to interact. Click the ground to walk to it or click a nearby object to interact. Right-drag orbits the camera; the mouse wheel zooms. B opens building, C crafting, I the backpack, J the quest journal, and Escape closes a panel or pauses. Touch controls are included.
+Play at eye level with a perspective camera, visible hands and tools, and crosshair targeting. Click the scene to capture the mouse, move the mouse to look, WASD to walk, Shift to run, Space to hop, and E or left-click to use the aimed object within reach. Interactions respect scenery and walls. Tab frees the cursor; Escape pauses. Menus release the mouse and wait for your next click to recapture it.
+
+If mouse capture is unavailable, use drag look. On touch screens, drag the scene to look and use the movement pad, Use button and Hop button. Arrow keys also turn the view. Scroll cycles tools or rotates a building plan. B opens building, C crafting, I the backpack, J the journal. Settings include field of view, mouse sensitivity, and optional head movement (off by default). The island and campaign remain fully playable in first person.
 
 The expansion has 36 story quests across six acts, 12 repeatable resident contracts, six regions, 17 building plans, 11 crafting recipes, and four crops. The island spans roughly 4.5 times its original area. Fishing has timed bites, coops and apiaries turn feed into produce, and five community projects culminate in a festival. Free play continues afterward.
 
@@ -31,7 +33,9 @@ Version 1 saves migrate to version 2, preserving inventory, plots, buildings and
 
 ## Project structure
 
-- `lib/game/world.ts`: scene, rendering, camera, movement, collision, placement and animation.
+- `lib/game/world.ts`: scene, first-person camera, pointer capture/fallback/touch controls, crosshair raycasting, movement, collision, placement and animation.
+- `lib/game/first-person.ts`: view settings, look/movement math and line-of-sight selection.
+- `lib/game/first-person-models.ts`: camera-space hands and seven tool models.
 - `lib/game/models.ts`: shared procedural 3D asset library.
 - `lib/game/state.ts`: economy, production, fishing, progression and save migration.
 - `lib/game/catalog.ts` and `quests.json`: recipes, residents, crops, projects and campaign content.

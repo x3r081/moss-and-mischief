@@ -1,5 +1,6 @@
 import { onLand } from './terrain';
 import story from './quests.json';
+import { DEFAULT_VIEW, normalizeView, type ViewSettings } from './first-person';
 import {
   RESOURCE_NAMES,
   RECIPES,
@@ -43,6 +44,7 @@ export type Stats = {
 };
 export type GameState = {
   version: 2;
+  view: ViewSettings;
   inventory: Inventory;
   buildings: Building[];
   plots: Plot[];
@@ -122,6 +124,7 @@ export function initialState(): GameState {
   Object.assign(inventory, { wood: 3, stone: 2, fiber: 2, seed: 8, coins: 10 });
   return {
     version: 2,
+    view: { ...DEFAULT_VIEW },
     inventory,
     buildings: [],
     plots: Array.from({ length: 6 }, (_, i) => ({
@@ -592,6 +595,7 @@ export function parseSave(raw: string | null): GameState | null {
     )
       return null;
     const s = { ...initialState(), ...x, version: 2, inventory } as GameState;
+    s.view = normalizeView(x.view);
     s.quality = x.quality === 'low' ? 'low' : 'high';
     s.sound = x.sound !== false;
     s.completed = [

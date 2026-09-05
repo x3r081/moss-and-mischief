@@ -814,6 +814,8 @@ void test('moving the build pointer off land invalidates a previously valid ghos
   const w: any = Object.create(IslandWorld.prototype);
   let feedback = '';
   Object.assign(w, {
+    state: () => initialState(),
+    camera: new THREE.PerspectiveCamera(75, 1, 0.06, 100),
     validGhost: true,
     ghost: new THREE.Group(),
     buildType: 'cottage',

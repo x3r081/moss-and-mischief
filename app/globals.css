@@ -2522,3 +2522,366 @@ kbd {
     font-size: 12px;
   }
 }
+/* First-person exploration keeps the center of the world clear. */
+.first-person .crosshair {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 22px;
+  height: 22px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  color: #ffffe4;
+  filter: drop-shadow(0 1px 2px #13332b);
+  z-index: 3;
+}
+.crosshair i {
+  position: absolute;
+  background: currentColor;
+  border-radius: 2px;
+}
+.crosshair i:nth-child(1) {
+  width: 2px;
+  height: 5px;
+  left: 10px;
+  top: 0;
+}
+.crosshair i:nth-child(2) {
+  width: 2px;
+  height: 5px;
+  left: 10px;
+  bottom: 0;
+}
+.crosshair i:nth-child(3) {
+  width: 5px;
+  height: 2px;
+  left: 0;
+  top: 10px;
+}
+.crosshair i:nth-child(4) {
+  width: 5px;
+  height: 2px;
+  right: 0;
+  top: 10px;
+}
+.crosshair span {
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  left: 9.5px;
+  top: 9.5px;
+  background: currentColor;
+  border-radius: 50%;
+}
+.crosshair.on-target {
+  color: #e9d88d;
+}
+.crosshair.place-valid {
+  color: #83efa7;
+}
+.crosshair.place-blocked {
+  color: #f8a98f;
+}
+.compass-heading {
+  position: absolute;
+  left: 50%;
+  top: 94px;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  background: #163d34b8;
+  border: 1px solid #e0edbc3a;
+  border-radius: 30px;
+  padding: 9px 16px;
+  pointer-events: none;
+  color: #ecedc6;
+  font-size: 14px;
+  letter-spacing: 1px;
+}
+.compass-heading span {
+  font-size: 12px;
+  color: #c8d8b3;
+}
+.first-person .interact-prompt {
+  bottom: auto;
+  top: calc(50% + 30px);
+  left: 50%;
+  max-width: min(440px, 88vw);
+  width: max-content;
+  background: #153c33df;
+  font-size: 14px;
+  z-index: 4;
+}
+.first-person .interact-prompt > span {
+  text-align: left;
+}
+.first-person .interact-prompt small {
+  font-size: 12px;
+  color: #d3e2b4;
+}
+.look-banner {
+  position: absolute;
+  left: 50%;
+  bottom: 210px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #173c35ee;
+  border: 1px solid #d5e4b759;
+  border-radius: 12px;
+  box-shadow: 0 8px 30px #06291e3d;
+  padding: 9px 15px;
+  z-index: 5;
+  max-width: 94vw;
+  width: max-content;
+}
+.look-banner > button:first-child {
+  font-size: 15px;
+  color: #e6ecc7;
+  text-align: left;
+  padding: 4px 0;
+}
+.look-banner span {
+  display: block;
+  font-size: 12px;
+  color: #baccb1;
+  margin-top: 5px;
+}
+.look-banner .drag-choice {
+  font-size: 12px;
+  border-left: 1px solid #cad9ad4d;
+  padding: 10px 0 10px 12px;
+  color: #d7dfa9;
+  white-space: nowrap;
+}
+.look-instruction {
+  position: absolute;
+  bottom: 207px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #153d32c9;
+  border: 1px solid #d5e4b730;
+  border-radius: 20px;
+  padding: 8px 14px;
+  font-size: 12px;
+  color: #dae3b7;
+  pointer-events: none;
+  max-width: 94vw;
+  white-space: nowrap;
+}
+.first-person .quest-card {
+  background: #133b31cf;
+  max-width: 270px;
+}
+.first-person .quest-card h2 {
+  font-size: 21px;
+}
+.first-person .quest-card p {
+  font-size: 13px;
+}
+.first-person .vignette {
+  background: linear-gradient(
+    180deg,
+    #102b2b33,
+    transparent 17%,
+    transparent 75%,
+    #0b292a55
+  );
+}
+.first-person .location-label {
+  font-size: 12px;
+}
+.first-person .build-hint {
+  bottom: 132px;
+}
+.first-person .build-hint > span:nth-child(3) {
+  font-size: 14px;
+}
+.mouse-captured .hotbar,
+.mouse-captured .header-actions,
+.mouse-captured .quest-card button,
+.mouse-captured .resource-strip,
+.mouse-captured .interact-prompt,
+.mouse-captured .build-hint button,
+.mouse-captured .crop-selector {
+  pointer-events: none;
+}
+.view-settings {
+  margin-top: 20px;
+  border-top: 1px solid #c8dcad27;
+  padding-top: 8px;
+}
+.view-settings h3 {
+  font: 22px Georgia;
+  color: #eee4c0;
+  margin: 15px 0;
+}
+.view-settings > label {
+  display: block;
+  padding: 12px 0;
+}
+.view-settings label > span {
+  display: flex;
+  justify-content: space-between;
+  font-size: 14px;
+  color: #dce6c4;
+}
+.view-settings label b {
+  color: #f2dda2;
+}
+.view-settings input[type='range'] {
+  width: 100%;
+  accent-color: #d4e3a3;
+  margin: 12px 0 4px;
+  cursor: pointer;
+}
+.view-settings small {
+  display: block;
+  color: #afc4a5;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.view-settings p {
+  font-size: 13px;
+  line-height: 1.7;
+  color: #b5cbaa;
+}
+.touch-actions {
+  display: none;
+}
+@media (pointer: coarse) {
+  .touch-actions {
+    display: flex;
+    position: absolute;
+    right: 22px;
+    bottom: 134px;
+    gap: 10px;
+    z-index: 6;
+  }
+  .touch-actions button {
+    border: 1px solid #c9deb76b;
+    border-radius: 50%;
+    width: 60px;
+    height: 60px;
+    background: #1e493bd9;
+    color: #e5edc8;
+    font-size: 14px;
+    touch-action: manipulation;
+  }
+  .first-person .look-instruction {
+    bottom: 265px;
+    white-space: normal;
+    text-align: center;
+    max-width: 70vw;
+  }
+  .first-person .touch-controls {
+    bottom: 130px;
+  }
+  .first-person .interact-prompt {
+    pointer-events: auto;
+  }
+  .first-person .look-banner {
+    bottom: 270px;
+  }
+  .first-person .build-hint {
+    max-width: 96vw;
+    bottom: 115px;
+  }
+  .first-person .touch-actions:has(button[aria-label='Place building']) {
+    bottom: 260px;
+  }
+}
+@media (max-width: 800px) {
+  .compass-heading {
+    top: 80px;
+    padding: 7px 12px;
+  }
+  .first-person .quest-card {
+    max-width: 230px;
+    top: 132px;
+  }
+  .first-person .quest-card h2 {
+    font-size: 18px;
+  }
+  .look-banner {
+    bottom: 180px;
+  }
+  .look-instruction {
+    bottom: 179px;
+  }
+  .first-person .intro p {
+    font-size: 16px;
+  }
+  .first-person .interact-prompt {
+    top: calc(50% + 25px);
+  }
+  .first-person .build-hint {
+    bottom: 116px;
+  }
+}
+@media (max-width: 560px) {
+  .compass-heading {
+    top: 66px;
+    padding: 5px 10px;
+    font-size: 12px;
+  }
+  .first-person .quest-card {
+    max-width: 182px;
+    top: 108px;
+  }
+  .first-person .quest-card h2 {
+    font-size: 16px;
+  }
+  .first-person .quest-card p {
+    font-size: 12px;
+  }
+  .first-person .quest-overline {
+    display: none;
+  }
+  .first-person .quest-bottom span {
+    font-size: 9px;
+  }
+  .look-banner {
+    padding: 9px 12px;
+    gap: 8px;
+    bottom: 174px;
+  }
+  .look-banner > button:first-child {
+    font-size: 13px;
+  }
+  .look-banner span {
+    font-size: 10px;
+  }
+  .look-banner .drag-choice {
+    font-size: 11px;
+  }
+  .first-person .interact-prompt {
+    font-size: 13px;
+    max-width: 90vw;
+  }
+  .first-person .interact-prompt small {
+    font-size: 11px;
+  }
+  .first-person .location-label {
+    font-size: 10px;
+    max-width: 150px;
+  }
+  .first-person .game-header {
+    gap: 5px;
+  }
+  .view-settings input[type='range'] {
+    min-height: 28px;
+  }
+}
+.crop-cycle {
+  font-size: 11px;
+  line-height: 1.4;
+  text-align: center;
+  color: #c1d5a7;
+  align-self: center;
+  padding: 0 6px;
+  border-right: 1px solid #bdd5a33d;
+  margin-right: 2px;
+}

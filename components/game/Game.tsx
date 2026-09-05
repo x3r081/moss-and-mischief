@@ -32,6 +32,12 @@ import {
 } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import Panels from './Panels';
+import {
+  compassName,
+  viewHeading,
+  type LookMode,
+  type ViewSettings,
+} from '@/lib/game/first-person';
 import { IslandAudio } from '@/lib/game/audio';
 import { registerGameTools, type Registry } from '@/lib/game/webmcp';
 import { IslandWorld, type Entity } from '@/lib/game/world';
@@ -104,6 +110,7 @@ export default function Game() {
     [started, setStarted] = useState(false),
     [ready, setReady] = useState(false),
     [near, setNear] = useState<Entity | null>(null),
+    [lookMode, setLookMode] = useState<LookMode>('free'),
     [toast, setToast] = useState(''),
     [panel, setPanel] = useState(''),
     [placementInfo, setPlacementInfo] = useState({ valid: false, message: '' }),
@@ -246,6 +253,7 @@ export default function Game() {
     try {
       instance = new IslandWorld(host.current!, () => data.current, {
         near: setNear,
+        look: setLookMode,
         placement: (valid, message) => setPlacementInfo({ valid, message }),
         interact: act,
         place: (type, x, z, rotation) => {
@@ -261,6 +269,16 @@ export default function Game() {
           if (name === 'cancel-build') {
             setPlacing(null);
             data.current.tool = 'axe';
+          } else if (name === 'cycle-crop') {
+            const crops = (Object.keys(CROPS) as Crop[]).filter(
+              (c) => data.current.completed.length >= CROPS[c].unlock,
+            );
+            data.current.crop =
+              crops[(crops.indexOf(data.current.crop) + 1) % crops.length];
+            refresh();
+          } else if (name === 'pause') {
+            setPanel('pause');
+            setDialogue('');
           } else if (name === 'escape') {
             setPanel((v) => (v ? '' : 'pause'));
             setDialogue('');
@@ -329,12 +347,13 @@ export default function Game() {
     data.current.started = true;
     setStarted(true);
     world.current?.setPaused(false);
+    world.current?.requestLook();
     refresh();
     persist();
     notify(
       data.current.migrated
         ? 'Your homestead is safe. The lighthouse was only the beginning—open your journal for the wider island.'
-        : 'Welcome to Bramblewick. Swap tools with 1–7. Find the goose; he has opinions.',
+        : 'Welcome to eye level. Mouse to look, WASD to walk, aim and E to interact. Tab frees the cursor.',
     );
   };
   const [now, setNow] = useState(0);
@@ -371,7 +390,9 @@ export default function Game() {
     else notify('Your browser could not store that save.');
   };
   return (
-    <main className="game-shell">
+    <main
+      className={`game-shell first-person ${lookMode === 'locked' ? 'mouse-captured' : ''}`}
+    >
       <div ref={host} className="world" />
       <div className="vignette" />
       <header className="game-header">
@@ -428,7 +449,7 @@ export default function Game() {
         <>
           <section className="intro">
             <span className="intro-label">
-              <span /> THE GREAT BRAMBLEWICK EXPANSION
+              <span /> BRAMBLEWICK · THROUGH YOUR EYES
             </span>
             <h1>
               Moss <i>&</i>
@@ -436,7 +457,7 @@ export default function Game() {
               Mischief<span>™</span>
             </h1>
             <p>
-              Six regions. Thirty-six quests. One grand misadventure.
+              Your boots. Your garden. One very opinionated goose.
               <br />
               Grow roots. Build something. Irritate a goose.
             </p>
@@ -446,14 +467,14 @@ export default function Game() {
               disabled={!ready || !!error}
             >
               <Play size={19} fill="currentColor" />
-              {hasSave ? 'Continue adventure' : 'Make yourself at home'}
+              {hasSave ? 'Step back onto the island' : 'Step onto the island'}
               <ArrowUpRight size={21} />
             </button>
             <div className="intro-foot">
               <span>
                 <Leaf size={13} /> No rush. No wrong turns.
               </span>
-              <span>Just one very opinionated goose.</span>
+              <span>Mouse to look · WASD to walk · E to interact</span>
             </div>
           </section>
           <div className="island-caption">
@@ -466,6 +487,45 @@ export default function Game() {
         </>
       ) : (
         <>
+          <div className="compass-heading" aria-label="Facing direction">
+            <Compass size={15} />
+            <b>{compassName(snapshot.view.yaw)}</b>
+            <span>{viewHeading(snapshot.view.yaw)}°</span>
+          </div>
+          {!panel && !dialogue && !win && (
+            <div
+              className={`crosshair ${near ? 'on-target' : ''} ${placing ? (placementInfo.valid ? 'place-valid' : 'place-blocked') : ''}`}
+              aria-hidden="true"
+            >
+              <i />
+              <i />
+              <i />
+              <i />
+              <span />
+            </div>
+          )}
+          {!panel && !dialogue && !win && lookMode === 'free' && (
+            <div className="look-banner">
+              <button onClick={() => world.current?.requestLook()}>
+                Click to look around{' '}
+                <span>WASD move · Tab releases the mouse</span>
+              </button>
+              <button
+                className="drag-choice"
+                onClick={() => world.current?.useDragLook()}
+              >
+                Use drag look
+              </button>
+            </div>
+          )}
+          {!panel &&
+            !dialogue &&
+            !win &&
+            (lookMode === 'drag' || lookMode === 'touch') && (
+              <div className="look-instruction">
+                Drag the scene to look · Aim at the crosshair · E or tap to use
+              </div>
+            )}
           <div className="resource-strip">
             {(['wood', 'stone', 'fiber', 'seed'] as Resource[]).map((r) => {
               const Icon = resourceIcons[r] ?? Package;
@@ -575,7 +635,14 @@ export default function Game() {
             </div>
           )}
           {snapshot.tool === 'seeds' && !placing && (
-            <div className="crop-selector" aria-label="Choose crop">
+            <div
+              className="crop-selector"
+              aria-label="Choose crop · R to cycle"
+            >
+              <span className="crop-cycle">
+                R<br />
+                crop
+              </span>
               {(Object.keys(CROPS) as Crop[]).map((c) => (
                 <button
                   key={c}
@@ -663,9 +730,9 @@ export default function Game() {
               <kbd>D</kbd> Move
             </span>
             <span>
-              <kbd>E</kbd> Interact
+              <kbd>E</kbd> Use tool
             </span>
-            <span>Right-drag to orbit · Scroll to zoom</span>
+            <span>Mouse look · Tab cursor · Esc pause</span>
           </div>
           <div className="save-indicator">
             <span />{' '}
@@ -673,12 +740,27 @@ export default function Game() {
               ? 'Progress saved on this device'
               : 'Saving unavailable · export in Settings'}
           </div>
+          <div className="touch-actions">
+            <button
+              aria-label={placing ? 'Place building' : 'Use equipped tool'}
+              onClick={() => {
+                if (placing) world.current?.confirmBuild();
+                else world.current?.interact();
+              }}
+            >
+              {placing ? 'Build' : 'Use · E'}
+            </button>
+            <button aria-label="Jump" onClick={() => world.current?.hop()}>
+              Hop
+            </button>
+          </div>
           <div className="touch-controls">
             <div className="touch-pad">
               <button
                 aria-label="Move forward"
                 onPointerDown={() => world.current?.setMovement(0, -1)}
                 onPointerUp={() => world.current?.setMovement(0, 0)}
+                onPointerCancel={() => world.current?.setMovement(0, 0)}
                 onPointerLeave={() => world.current?.setMovement(0, 0)}
               >
                 ↑
@@ -687,6 +769,7 @@ export default function Game() {
                 aria-label="Move left"
                 onPointerDown={() => world.current?.setMovement(-1, 0)}
                 onPointerUp={() => world.current?.setMovement(0, 0)}
+                onPointerCancel={() => world.current?.setMovement(0, 0)}
                 onPointerLeave={() => world.current?.setMovement(0, 0)}
               >
                 ←
@@ -695,6 +778,7 @@ export default function Game() {
                 aria-label="Move back"
                 onPointerDown={() => world.current?.setMovement(0, 1)}
                 onPointerUp={() => world.current?.setMovement(0, 0)}
+                onPointerCancel={() => world.current?.setMovement(0, 0)}
                 onPointerLeave={() => world.current?.setMovement(0, 0)}
               >
                 ↓
@@ -703,6 +787,7 @@ export default function Game() {
                 aria-label="Move right"
                 onPointerDown={() => world.current?.setMovement(1, 0)}
                 onPointerUp={() => world.current?.setMovement(0, 0)}
+                onPointerCancel={() => world.current?.setMovement(0, 0)}
                 onPointerLeave={() => world.current?.setMovement(0, 0)}
               >
                 →
@@ -752,7 +837,7 @@ export default function Game() {
           refresh();
           world.current?.setBuild(type);
           notify(
-            'Move your pointer over clear ground nearby. Green means it fits.',
+            'Aim down at clear ground. The crosshair places the footprint. R rotates; E, Enter or click builds.',
           );
         }}
         craft={(type: Craftable, amount = 1) => {
@@ -784,6 +869,15 @@ export default function Game() {
               ? 'A wholesome snack. The goose is jealous.'
               : 'Crunch. A delicious agricultural achievement.',
           );
+          refresh();
+          persist();
+        }}
+        viewSetting={(key, value) => {
+          data.current.view = {
+            ...data.current.view,
+            [key]: value,
+          } as ViewSettings;
+          world.current?.updateView();
           refresh();
           persist();
         }}

@@ -107,6 +107,10 @@ type Props = {
   eat: (type: 'bread' | 'carrot') => void;
   contract: (id: string) => void;
   trade: (type: Resource, sell: boolean) => void;
+  viewSetting: (
+    key: 'fov' | 'sensitivity' | 'bob',
+    value: number | boolean,
+  ) => void;
   setting: (key: 'sound' | 'quality', value: boolean | 'high' | 'low') => void;
   save: () => void;
   exportSave: () => void;
@@ -666,10 +670,26 @@ export default function Panels(props: Props) {
           )}
           {panel === 'help' && (
             <div className="expansion-help">
+              <h3>Welcome to eye level.</h3>
+              <p>
+                Click the scene to capture your mouse. Move the mouse to look
+                around and use WASD to walk. Aim the crosshair at a nearby
+                object; its name appears when it is within reach. E or
+                left-click uses your equipped tool. The first click after a menu
+                captures the mouse without using your tool.
+              </p>
+              <p>
+                Tab releases the cursor for the toolbar. Escape pauses and frees
+                the cursor. Closing a menu leaves the mouse free until you click
+                the scene again. If mouse capture is unavailable, choose Drag
+                look: hold and drag the scene to look, then tap or press E to
+                use. On touch screens, drag the scene to look and use the
+                movement pad and Use button. Arrow keys also turn the view.
+              </p>
               <h3>Your tools have jobs.</h3>
               <p>
                 <b>1 Axe:</b> timber. <b>2 Pickaxe:</b> stone, clay, copper.{' '}
-                <b>3 Seeds:</b> select a crop, then plant empty beds.{' '}
+                <b>3 Seeds:</b> R cycles unlocked crops; plant empty beds.{' '}
                 <b>4 Water:</b> water growing crops. <b>5 Build:</b> plans and
                 placement. <b>6 Hands:</b> harvest crops, forage, collect
                 relics. <b>7 Rod:</b> fish.
@@ -677,8 +697,9 @@ export default function Panels(props: Props) {
               <p>
                 <b>E uses your equipped tool.</b> The interaction prompt tells
                 you which tool is needed. Talk, refill water, use stations and
-                contribute to projects with any tool. Click an object to
-                approach it; obstacles may require walking around.
+                contribute to projects with any tool. Aim at the object within
+                reach and press E or left-click. Objects behind walls cannot be
+                used.
               </p>
               <h3>Grow a little more.</h3>
               <p>
@@ -717,10 +738,11 @@ export default function Panels(props: Props) {
                 counts, recipes for projects, and 12 repeatable requests.
               </p>
               <p>
-                <b>Controls:</b> WASD / arrows to walk, Shift to sprint, Space
-                to hop, right-drag to orbit, scroll to zoom. B build, C craft, I
-                backpack, J journal, Esc pause. Click the toolbar on touch
-                devices.
+                <b>Controls:</b> WASD walk, mouse or arrows look, Shift sprint,
+                Space hop, E / left-click use. Scroll switches tools; during
+                building it rotates the plan. B build, C craft, I backpack, J
+                journal, Tab cursor, Esc pause. Field of view, mouse sensitivity
+                and optional head movement are in Settings.
               </p>
               <p className="help-tip">
                 Progress autosaves on this device. Export a backup in Settings.
@@ -765,6 +787,58 @@ export default function Panels(props: Props) {
                     Lightweight
                   </button>
                 </div>
+              </div>
+              <div className="view-settings">
+                <h3>First-person comfort</h3>
+                <label htmlFor="view-fov">
+                  <span>
+                    Field of view <b>{state.view.fov}°</b>
+                  </span>
+                  <input
+                    id="view-fov"
+                    type="range"
+                    min="60"
+                    max="95"
+                    step="1"
+                    value={state.view.fov}
+                    onChange={(e) =>
+                      props.viewSetting('fov', Number(e.target.value))
+                    }
+                  />
+                  <small>A wider view shows more of the island.</small>
+                </label>
+                <label htmlFor="view-sensitivity">
+                  <span>
+                    Mouse sensitivity{' '}
+                    <b>{state.view.sensitivity.toFixed(1)}×</b>
+                  </span>
+                  <input
+                    id="view-sensitivity"
+                    type="range"
+                    min="0.3"
+                    max="2.5"
+                    step="0.1"
+                    value={state.view.sensitivity}
+                    onChange={(e) =>
+                      props.viewSetting('sensitivity', Number(e.target.value))
+                    }
+                  />
+                </label>
+                <div className="setting-row">
+                  <span>
+                    Gentle head movement
+                    <small>Off keeps the camera steady while walking.</small>
+                  </span>
+                  <Switch
+                    checked={state.view.bob}
+                    onCheckedChange={(v) => props.viewSetting('bob', v)}
+                    aria-label="Gentle head movement"
+                  />
+                </div>
+                <p>
+                  Mouse to look · WASD to walk · Tab to release the cursor.
+                  Click the scene to resume looking after closing this menu.
+                </p>
               </div>
               <div className="save-actions">
                 <button onClick={props.save}>

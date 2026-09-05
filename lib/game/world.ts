@@ -7,7 +7,6 @@ import {
   makeWorkbench,
   makeCampfire,
   makeFence,
-  makePlayer,
   makeGoose,
   makeChest,
   makeCrystal,
@@ -37,6 +36,19 @@ import {
   type Tool,
 } from './catalog';
 import { placement, footprint, circleHits } from './placement';
+import {
+  makeFirstPersonRig,
+  disposeFirstPersonModels,
+} from './first-person-models';
+import {
+  EYE_HEIGHT,
+  INTERACTION_REACH,
+  lookDelta,
+  walkDirection,
+  aimEntity,
+  visibleInTree,
+  type LookMode,
+} from './first-person';
 import { heightAt, onLand, shoreRadius } from './terrain';
 export { heightAt, onLand, shoreRadius, LAND_RADIUS } from './terrain';
 
@@ -74,6 +86,7 @@ export type Entity = {
 };
 export type WorldEvents = {
   near: (e: Entity | null) => void;
+  look: (mode: LookMode) => void;
   placement: (valid: boolean, message: string) => void;
   interact: (e: Entity) => void;
   place: (type: Structure, x: number, z: number, rotation: number) => void;
@@ -92,18 +105,12 @@ function random(seed = 8) {
 const mat = (c: number) =>
   new THREE.MeshStandardMaterial({ color: c, roughness: 1, flatShading: true });
 
-const targets = {
-  goose: [-3, 4],
-  ruins: [-6, -18],
-  lighthouse: [17, -9],
-} as const;
-
 export class IslandWorld {
   scene = new THREE.Scene();
-  camera: THREE.OrthographicCamera;
+  camera: THREE.PerspectiveCamera;
   renderer: THREE.WebGLRenderer;
   entities: Entity[] = [];
-  player = makePlayer();
+  player = new THREE.Group();
   near: Entity | null = null;
   stamina = 100;
   paused = true;
@@ -113,23 +120,28 @@ export class IslandWorld {
   private validGhost = false;
   private ghostPoint = new THREE.Vector3();
   private keys = new Set<string>();
-  private destination: THREE.Vector3 | null = null;
-  private destinationEntity: Entity | null = null;
   private ray = new THREE.Raycaster();
-  private mouse = new THREE.Vector2();
-  private plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -0.7);
-  private target = new THREE.Vector3(0, 0, 2);
-  private cameraAngle = 0.65;
-  private zoom = 18;
-  private drag = false;
-  private downX = 0;
-  private downY = 0;
+  private mouse = new THREE.Vector2(0, 0);
+  private lookMode: LookMode = 'free';
+  private expectedUnlock = false;
+  private requestingLock = false;
+  private pointerId: number | null = null;
+  private pointerOrigin = new THREE.Vector2();
+  private pointerLast = new THREE.Vector2();
+  private pointerDragged = false;
+  private pointerConsumed = false;
+  private staticAimMeshes: THREE.Mesh[] = [];
+  private aimMeshes: THREE.Mesh[] = [];
+  private lastAim = 0;
+  private lastBuildAim = 0;
+  private viewScene = new THREE.Scene();
+  private viewCamera = new THREE.PerspectiveCamera(72, 1, 0.025, 4);
+  private handRig = makeFirstPersonRig();
   private ground!: THREE.Mesh;
   private water!: THREE.Mesh<THREE.PlaneGeometry, THREE.ShaderMaterial>;
   private sun = new THREE.DirectionalLight(0xffe1a0, 3.3);
   private ambient = new THREE.HemisphereLight(0xc9eeea, 0x65834b, 2.15);
   private ring!: THREE.Mesh;
-  private marker!: THREE.Mesh;
   private windmill!: THREE.Group;
   private goose!: THREE.Group;
   private lighthouse!: THREE.Group;
@@ -158,12 +170,12 @@ export class IslandWorld {
   private gridCenter = new THREE.Vector2(999, 999);
   private lastPlacementMessage = '';
   private equipped: Tool | null = null;
-  private handheld: THREE.Group | null = null;
   private last = 0;
   private frame = 0;
   private clock = 0;
   private lastUi = 0;
   private jump = 0;
+  private headOffset = 0;
   private jumpSpeed = 0;
   private swing = 0;
   private resizeObserver: ResizeObserver;
@@ -177,14 +189,13 @@ export class IslandWorld {
     private events: WorldEvents,
   ) {
     const aspect = host.clientWidth / Math.max(host.clientHeight, 1);
-    this.camera = new THREE.OrthographicCamera(
-      -18 * aspect,
-      18 * aspect,
-      18,
-      -18,
-      0.1,
+    this.camera = new THREE.PerspectiveCamera(
+      this.state().view.fov,
+      aspect,
+      0.06,
       220,
     );
+    this.camera.rotation.order = 'YXZ';
     this.renderer = new THREE.WebGLRenderer({
       antialias: true,
       alpha: false,
@@ -199,12 +210,12 @@ export class IslandWorld {
     this.renderer.toneMappingExposure = 1.05;
     this.renderer.domElement.setAttribute(
       'aria-label',
-      '3D island. Move with WASD or click the ground; E to interact.',
+      'First-person island. Click to capture the mouse, WASD to move, aim and press E to use your tool. Tab releases the mouse. Escape pauses.',
     );
     this.renderer.domElement.tabIndex = 0;
     host.appendChild(this.renderer.domElement);
     this.scene.background = new THREE.Color(0xa4d8d5);
-    this.scene.fog = new THREE.FogExp2(0xa4d8d5, 0.0075);
+    this.scene.fog = new THREE.FogExp2(0xa4d8d5, 0.009);
     this.sun.position.set(-18, 36, 15);
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(2048, 2048);
@@ -224,10 +235,14 @@ export class IslandWorld {
     this.createNature();
     this.createExpansion();
     this.createAtmosphere();
+    this.staticAimMeshes = this.collectAimMeshes(this.scene);
+    this.rebuildAimMeshes();
     const p = this.state().player;
     this.player.position.set(p.x, heightAt(p.x, p.z), p.z);
-    this.player.rotation.y = Math.PI * 0.8;
-    this.scene.add(this.player);
+    this.viewScene.add(new THREE.HemisphereLight(0xfff6d6, 0x536951, 2.6));
+    const handLight = new THREE.DirectionalLight(0xffe4b6, 2.4);
+    handLight.position.set(-1, 2, 1);
+    this.viewScene.add(handLight, this.handRig);
     this.ring = new THREE.Mesh(
       new THREE.RingGeometry(0.8, 0.89, 40),
       new THREE.MeshBasicMaterial({
@@ -241,18 +256,6 @@ export class IslandWorld {
     this.ring.rotation.x = -Math.PI / 2;
     this.ring.visible = false;
     this.scene.add(this.ring);
-    this.marker = new THREE.Mesh(
-      new THREE.RingGeometry(0.22, 0.28, 24),
-      new THREE.MeshBasicMaterial({
-        color: 0xffffff,
-        transparent: true,
-        opacity: 0.8,
-        depthWrite: false,
-      }),
-    );
-    this.marker.rotation.x = -Math.PI / 2;
-    this.marker.visible = false;
-    this.scene.add(this.marker);
     this.sync();
     this.recoverPlayer();
     this.setQuality(this.state().quality);
@@ -929,6 +932,7 @@ export class IslandWorld {
       if (n.role === 'mayor') continue;
       const person = this.placeObject(makeVillager(n.role), n.x, n.z, 1.15);
       person.rotation.y = 0.4;
+      this.blockers.push({ x: n.x, z: n.z, r: 0.4 });
       this.entity(key, 'npc', `Talk to ${n.name}`, n.x, n.z, person, 0.6);
       this.label(n.name, n.x, n.z);
       const shelter = this.placeObject(
@@ -1110,6 +1114,7 @@ export class IslandWorld {
           continue;
         const cliff = this.placeObject(makeRock(x + z + 3000), x, z);
         cliff.scale.set(2.7, 1.5 + rand(), 1.4);
+        this.blockers.push({ x, z, r: 2.1 });
       }
   }
   private walkable(x: number, z: number) {
@@ -1134,92 +1139,18 @@ export class IslandWorld {
     const tool = this.state().tool;
     if (tool === this.equipped) return;
     this.equipped = tool;
-    if (this.handheld) {
-      this.handheld.removeFromParent();
-      this.handheld.traverse((o) => {
-        if (o instanceof THREE.Mesh) {
-          o.geometry.dispose();
-          (o.material as THREE.Material).dispose();
-        }
-      });
+    for (const t of [
+      'axe',
+      'pickaxe',
+      'seeds',
+      'water',
+      'build',
+      'hands',
+      'rod',
+    ]) {
+      const model = this.handRig.getObjectByName(`tool-${t}`);
+      if (model) model.visible = t === tool;
     }
-    const arm = this.player.getObjectByName('rightArm');
-    if (!arm || tool === 'hands') {
-      this.handheld = null;
-      return;
-    }
-    const g = new THREE.Group(),
-      handle = mat(0x90623d),
-      metal = mat(0xb4c4bb);
-    g.position.set(0.08, -0.34, 0.24);
-    if (['axe', 'pickaxe', 'build'].includes(tool)) {
-      this.addMesh(
-        new THREE.CylinderGeometry(0.035, 0.045, 0.8, 6),
-        handle,
-        0,
-        -0.13,
-        0.12,
-        g,
-      );
-      this.addMesh(
-        new THREE.BoxGeometry(tool === 'pickaxe' ? 0.65 : 0.32, 0.18, 0.1),
-        metal,
-        0.08,
-        0.24,
-        0.12,
-        g,
-      );
-    }
-    if (tool === 'water') {
-      this.addMesh(
-        new THREE.CylinderGeometry(0.18, 0.16, 0.27, 10),
-        mat(0x478d83),
-        0,
-        0,
-        0.1,
-        g,
-      );
-      const spout = this.addMesh(
-        new THREE.CylinderGeometry(0.055, 0.03, 0.35, 6),
-        metal,
-        0.19,
-        0.08,
-        0.1,
-        g,
-      );
-      spout.rotation.z = -0.85;
-    }
-    if (tool === 'seeds')
-      this.addMesh(
-        new THREE.SphereGeometry(0.16, 8, 6),
-        mat(0xd7b57a),
-        0,
-        0,
-        0.1,
-        g,
-      );
-    if (tool === 'rod') {
-      const rod = this.addMesh(
-        new THREE.CylinderGeometry(0.025, 0.035, 1.8, 6),
-        handle,
-        0,
-        0.5,
-        0.1,
-        g,
-      );
-      rod.rotation.x = -0.25;
-      const line = this.addMesh(
-        new THREE.CylinderGeometry(0.007, 0.007, 1.2, 4),
-        metal,
-        0,
-        0.65,
-        0.5,
-        g,
-      );
-      line.rotation.x = 0.1;
-    }
-    this.handheld = g;
-    arm.add(g);
   }
   private createAtmosphere() {
     const rand = random(90),
@@ -1266,8 +1197,51 @@ export class IslandWorld {
     }
   }
   private bind() {
-    const signal = this.abort.signal;
-    const el = this.renderer.domElement;
+    const signal = this.abort.signal,
+      el = this.renderer.domElement;
+    const emitMode = (mode: LookMode) => {
+      this.lookMode = mode;
+      this.events.look(mode);
+    };
+    document.addEventListener(
+      'pointerlockchange',
+      () => {
+        this.requestingLock = false;
+        if (document.pointerLockElement === el) {
+          if (this.paused) {
+            this.releaseLook();
+            return;
+          }
+          this.expectedUnlock = false;
+          emitMode('locked');
+        } else {
+          const unexpected =
+            this.lookMode === 'locked' && !this.expectedUnlock && !this.paused;
+          this.expectedUnlock = false;
+          this.keys.clear();
+          emitMode('free');
+          if (unexpected) this.events.menu('pause');
+        }
+      },
+      { signal },
+    );
+    document.addEventListener(
+      'pointerlockerror',
+      () => {
+        this.requestingLock = false;
+        if (!this.paused) emitMode('drag');
+      },
+      { signal },
+    );
+    document.addEventListener(
+      'mousemove',
+      (e) => {
+        if (!this.paused && document.pointerLockElement === el) {
+          this.turn(e.movementX, e.movementY);
+        }
+      },
+      { signal },
+    );
     window.addEventListener(
       'keydown',
       (e) => {
@@ -1278,28 +1252,46 @@ export class IslandWorld {
         )
           return;
         if (
-          ['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(
-            e.code,
-          )
+          [
+            'Space',
+            'ArrowUp',
+            'ArrowDown',
+            'ArrowLeft',
+            'ArrowRight',
+            'Tab',
+          ].includes(e.code) &&
+          this.state().started
         )
           e.preventDefault();
-        this.keys.add(e.code);
-        if (e.repeat) return;
-        if (e.code === 'Escape') {
+        if (e.code === 'Escape' && !e.repeat) {
           if (this.buildType) {
             this.setBuild(null);
             this.events.menu('cancel-build');
-            return;
           }
-          this.events.menu('escape');
+          this.events.menu('pause');
+          return;
         }
         if (this.paused) return;
-        if (e.code === 'KeyE') this.interact();
+        if (e.code === 'Tab' && !e.repeat) {
+          if (this.lookMode === 'locked') this.releaseLook();
+          else this.requestLook();
+          return;
+        }
+        this.keys.add(e.code);
+        if (e.repeat) return;
+        if (e.code === 'KeyE') {
+          if (this.buildType) this.confirmBuild();
+          else this.interact();
+        }
         if (e.code === 'KeyB') this.events.menu('build');
         if (e.code === 'KeyC') this.events.menu('craft');
         if (e.code === 'KeyJ') this.events.menu('journal');
         if (e.code === 'KeyI') this.events.menu('inventory');
-        if (e.code === 'KeyR' && this.buildType) this.rotateBuild();
+        if (e.code === 'KeyR') {
+          if (this.buildType) this.rotateBuild();
+          else if (this.state().tool === 'seeds')
+            this.events.menu('cycle-crop');
+        }
         if (e.code === 'Enter' && this.buildType) this.confirmBuild();
         if (e.code === 'Space' && this.jump <= 0) this.jumpSpeed = 5;
         if (e.code.startsWith('Digit')) this.events.menu(e.code);
@@ -1313,7 +1305,15 @@ export class IslandWorld {
       'blur',
       () => {
         this.keys.clear();
-        this.destination = null;
+        this.pointerId = null;
+        if (!this.paused && this.state().started) this.events.menu('pause');
+      },
+      { signal },
+    );
+    document.addEventListener(
+      'visibilitychange',
+      () => {
+        if (document.hidden && this.state().started) this.events.menu('pause');
       },
       { signal },
     );
@@ -1321,9 +1321,32 @@ export class IslandWorld {
     el.addEventListener(
       'pointerdown',
       (e) => {
-        this.downX = e.clientX;
-        this.downY = e.clientY;
-        this.drag = e.button === 2;
+        if (this.paused) return;
+        if (document.pointerLockElement === el) {
+          if (e.button === 0) {
+            if (this.buildType) this.confirmBuild();
+            else this.interact();
+          }
+          return;
+        }
+        if (this.pointerId !== null) return;
+        this.pointerConsumed = false;
+        if (
+          e.pointerType === 'mouse' &&
+          this.lookMode === 'free' &&
+          e.button === 0
+        ) {
+          this.pointerConsumed = true;
+          this.requestLook();
+          return;
+        }
+        if (e.pointerType !== 'mouse') {
+          emitMode('touch');
+        } else if (e.button !== 0 && e.button !== 2) return;
+        this.pointerId = e.pointerId;
+        this.pointerOrigin.set(e.clientX, e.clientY);
+        this.pointerLast.copy(this.pointerOrigin);
+        this.pointerDragged = false;
         el.setPointerCapture(e.pointerId);
       },
       { signal },
@@ -1331,112 +1354,140 @@ export class IslandWorld {
     el.addEventListener(
       'pointermove',
       (e) => {
-        if (this.drag) {
-          this.cameraAngle -= e.movementX * 0.006;
-          return;
-        }
-        this.screenPoint(e.clientX, e.clientY);
-        if (this.buildType) this.updateGhost();
-      },
-      { signal },
-    );
-    el.addEventListener(
-      'pointerup',
-      (e) => {
-        if (this.drag) {
-          this.drag = false;
-          return;
-        }
         if (
           this.paused ||
-          Math.hypot(e.clientX - this.downX, e.clientY - this.downY) > 10
+          document.pointerLockElement === el ||
+          this.pointerId !== e.pointerId
         )
           return;
-        const bounds = el.getBoundingClientRect();
+        const dx = e.clientX - this.pointerLast.x,
+          dy = e.clientY - this.pointerLast.y;
+        this.pointerLast.set(e.clientX, e.clientY);
         if (
-          e.clientX < bounds.left ||
-          e.clientX > bounds.right ||
-          e.clientY < bounds.top ||
-          e.clientY > bounds.bottom
+          Math.hypot(
+            e.clientX - this.pointerOrigin.x,
+            e.clientY - this.pointerOrigin.y,
+          ) > 5
         )
-          return;
-        this.screenPoint(e.clientX, e.clientY);
-        if (this.buildType) {
-          this.confirmBuild();
-          return;
-        }
-        const hit = this.ray.intersectObjects(
-          this.entities.filter((n) => n.object.visible).map((n) => n.object),
-          true,
-        )[0];
-        let clicked: Entity | undefined;
-        if (hit)
-          clicked = this.entities.find((n) => {
-            let o: THREE.Object3D | null = hit.object;
-            while (o) {
-              if (o === n.object) return true;
-              o = o.parent;
-            }
-            return false;
-          });
-        if (clicked) {
-          if (
-            Math.hypot(
-              clicked.x - this.player.position.x,
-              clicked.z - this.player.position.z,
-            ) <
-            3 + clicked.radius
-          ) {
-            this.events.interact(clicked);
-            this.swing = 0.4;
-          } else {
-            this.destination = new THREE.Vector3(clicked.x, 0, clicked.z);
-            this.destinationEntity = clicked;
-          }
-        } else {
-          const hits = this.ray.intersectObject(this.ground);
-          if (hits.length && onLand(hits[0].point.x, hits[0].point.z, 1)) {
-            this.destination = hits[0].point.clone();
-            this.destinationEntity = null;
-            this.marker.position.set(
-              this.destination.x,
-              heightAt(this.destination.x, this.destination.z) + 0.07,
-              this.destination.z,
-            );
-            this.marker.visible = true;
-          }
-        }
+          this.pointerDragged = true;
+        this.turn(dx, dy);
       },
       { signal },
     );
+    const endPointer = (e: PointerEvent) => {
+      if (this.pointerConsumed) {
+        this.pointerConsumed = false;
+        return;
+      }
+      if (this.pointerId !== e.pointerId) return;
+      this.pointerId = null;
+      if (el.hasPointerCapture(e.pointerId))
+        el.releasePointerCapture(e.pointerId);
+      if (
+        e.type === 'pointercancel' ||
+        this.paused ||
+        this.pointerDragged ||
+        e.button === 2
+      )
+        return;
+      const r = el.getBoundingClientRect();
+      if (
+        e.clientX < r.left ||
+        e.clientX > r.right ||
+        e.clientY < r.top ||
+        e.clientY > r.bottom
+      )
+        return;
+      if (this.buildType) this.confirmBuild();
+      else this.interact();
+    };
+    el.addEventListener('pointerup', endPointer, { signal });
+    el.addEventListener('pointercancel', endPointer, { signal });
     el.addEventListener(
       'wheel',
       (e) => {
+        if (this.paused) return;
         e.preventDefault();
-        this.zoom = THREE.MathUtils.clamp(this.zoom + e.deltaY * 0.012, 9, 27);
-        this.resize();
+        if (this.buildType) this.rotateBuild();
+        else {
+          const tools: Tool[] = [
+            'axe',
+            'pickaxe',
+            'seeds',
+            'water',
+            'build',
+            'hands',
+            'rod',
+          ];
+          let i = tools.indexOf(this.state().tool);
+          i = (i + (e.deltaY > 0 ? 1 : 6)) % 7;
+          this.events.menu(`Digit${i + 1}`);
+        }
       },
       { signal, passive: false },
     );
   }
-  private screenPoint(x: number, y: number) {
-    const rect = this.renderer.domElement.getBoundingClientRect();
-    this.mouse.set(
-      ((x - rect.left) / rect.width) * 2 - 1,
-      (-(y - rect.top) / rect.height) * 2 + 1,
-    );
-    this.ray.setFromCamera(this.mouse, this.camera);
+  requestLook() {
+    if (
+      this.paused ||
+      this.requestingLock ||
+      document.pointerLockElement === this.renderer.domElement
+    )
+      return;
+    if (window.matchMedia('(pointer: coarse)').matches) {
+      this.useDragLook(true);
+      return;
+    }
+    const el = this.renderer.domElement;
+    el.focus({ preventScroll: true });
+    if (typeof el.requestPointerLock !== 'function') {
+      this.useDragLook();
+      return;
+    }
+    this.requestingLock = true;
+    try {
+      const result = el.requestPointerLock();
+      if (result && typeof result.catch === 'function')
+        void result.catch(() => {
+          this.requestingLock = false;
+          if (!this.paused) this.useDragLook();
+        });
+    } catch {
+      this.requestingLock = false;
+      this.useDragLook();
+    }
+  }
+  releaseLook() {
+    this.expectedUnlock = true;
+    this.keys.clear();
+    this.pointerId = null;
+    if (document.pointerLockElement === this.renderer.domElement)
+      document.exitPointerLock();
+    else {
+      this.lookMode = 'free';
+      this.events.look('free');
+    }
+  }
+  useDragLook(touch = false) {
+    this.releaseLook();
+    this.lookMode = touch ? 'touch' : 'drag';
+    this.events.look(this.lookMode);
+  }
+  private turn(dx: number, dy: number) {
+    if (this.paused) return;
+    lookDelta(this.state().view, dx, dy);
   }
   private resize() {
     const w = this.host.clientWidth,
       h = this.host.clientHeight;
     if (!w || !h) return;
     this.renderer.setSize(w, h);
-    this.camera.left = (-this.zoom * w) / h;
-    this.camera.right = (this.zoom * w) / h;
-    this.camera.top = this.zoom;
-    this.camera.bottom = -this.zoom;
+    this.camera.aspect = w / h;
+    this.camera.fov = this.state().view.fov;
     this.camera.updateProjectionMatrix();
+    this.viewCamera.aspect = w / h;
+    this.handRig.scale.x = Math.min(1, w / h / 1.45);
+    this.viewCamera.updateProjectionMatrix();
   }
   setQuality(q: 'high' | 'low') {
     this.renderer.setPixelRatio(
@@ -1445,12 +1496,17 @@ export class IslandWorld {
     this.renderer.shadowMap.enabled = q === 'high';
     this.resize();
   }
-  setPaused(p: boolean) {
-    this.paused = p;
+  updateView() {
+    this.resize();
+  }
+  setPaused(paused: boolean) {
+    this.paused = paused;
     this.keys.clear();
-    this.destination = null;
-    this.destinationEntity = null;
-    if (this.marker) this.marker.visible = false;
+    this.pointerId = null;
+    if (paused) this.releaseLook();
+  }
+  hop() {
+    if (!this.paused && this.jump <= 0) this.jumpSpeed = 5;
   }
   setMovement(x: number, z: number) {
     for (const k of ['KeyW', 'KeyA', 'KeyS', 'KeyD']) this.keys.delete(k);
@@ -1459,12 +1515,56 @@ export class IslandWorld {
     if (z < -0.2) this.keys.add('KeyW');
     if (z > 0.2) this.keys.add('KeyS');
   }
+  private collectAimMeshes(root: THREE.Object3D) {
+    const list: THREE.Mesh[] = [];
+    root.traverse((o) => {
+      if (o instanceof THREE.Mesh && !(o instanceof THREE.InstancedMesh)) {
+        const materials = Array.isArray(o.material) ? o.material : [o.material];
+        if (materials.some((m) => !m.transparent || m.opacity > 0.3))
+          list.push(o);
+      }
+    });
+    return list;
+  }
+  private rebuildAimMeshes() {
+    this.aimMeshes = [...this.staticAimMeshes];
+    for (const g of this.placed.values())
+      this.aimMeshes.push(...this.collectAimMeshes(g));
+    for (const p of this.plantGroups.values())
+      this.aimMeshes.push(...this.collectAimMeshes(p.group));
+  }
+  private centerHits(reach = INTERACTION_REACH) {
+    const state = this.state();
+    this.camera.position.set(
+      this.player.position.x,
+      this.player.position.y + EYE_HEIGHT,
+      this.player.position.z,
+    );
+    this.camera.rotation.set(state.view.pitch, state.view.yaw, 0, 'YXZ');
+    this.camera.updateMatrixWorld(true);
+    this.scene.updateMatrixWorld(true);
+    this.ray.setFromCamera(this.mouse, this.camera);
+    this.ray.far = reach;
+    return this.ray.intersectObjects(
+      this.aimMeshes.filter(visibleInTree),
+      false,
+    );
+  }
+  private updateFocus() {
+    const focused = aimEntity(this.centerHits(), this.entities);
+    if (this.near !== focused) {
+      this.near = focused;
+      this.events.near(focused);
+    }
+    return focused;
+  }
   interact() {
     if (this.paused) return;
-    if (this.near) {
-      this.events.interact(this.near);
-      this.swing = 0.4;
-      this.burst(this.near.x, this.near.z);
+    const target = this.updateFocus();
+    if (target) {
+      this.events.interact(target);
+      this.swing = 0.42;
+      this.burst(target.x, target.z);
     }
   }
   setBuild(type: Structure | null) {
@@ -1528,7 +1628,7 @@ export class IslandWorld {
     this.updateGrid();
     this.events.placement(
       false,
-      'Point at the grid. Green cells have room for this building.',
+      'Look down at the grid. Green cells fit this building.',
     );
   }
   private buildModel(type: Structure) {
@@ -1549,6 +1649,10 @@ export class IslandWorld {
     z: number,
     rotation = this.rotation,
   ) {
+    this.state().player = {
+      x: this.player.position.x,
+      z: this.player.position.z,
+    };
     return placement(this.state(), type, x, z, rotation, [
       ...this.blockers,
       ...this.entities
@@ -1628,11 +1732,19 @@ export class IslandWorld {
   private updateGhost() {
     this.validGhost = false;
     if (!this.ghost || !this.buildType) return;
+    this.camera.rotation.set(
+      this.state().view.pitch,
+      this.state().view.yaw,
+      0,
+      'YXZ',
+    );
+    this.camera.updateMatrixWorld(true);
     this.ray.setFromCamera(this.mouse, this.camera);
+    this.ray.far = 30;
     const hit = this.ray.intersectObject(this.ground)[0];
     if (!hit) {
       this.ghost.visible = false;
-      this.events.placement(false, 'Point at solid ground inside the grid.');
+      this.events.placement(false, 'Look down at solid ground within 14m.');
       return;
     }
     const x = Math.round(hit.point.x * 2) / 2,
@@ -1642,6 +1754,17 @@ export class IslandWorld {
     this.ghost.rotation.y = this.rotation;
     this.ghost.visible = true;
     const check = this.placementResult(this.buildType, x, z);
+    if (check.ok) {
+      const obstruction = this.centerHits(30)[0];
+      if (
+        obstruction &&
+        obstruction.object !== this.ground &&
+        obstruction.distance < hit.distance - 0.15
+      ) {
+        check.ok = false;
+        check.reason = 'Something blocks your view. Step to a clear spot.';
+      }
+    }
     const affordable = canAfford(this.state(), RECIPES[this.buildType].cost);
     this.validGhost = check.ok && affordable;
     const reason =
@@ -1660,11 +1783,13 @@ export class IslandWorld {
     });
   }
   sync() {
+    let changed = false;
     const state = this.state();
     for (const [id, g] of this.placed) {
       if (!state.buildings.some((b) => b.id === id)) {
         this.scene.remove(g);
         this.placed.delete(id);
+        changed = true;
         this.entities = this.entities.filter((e) => e.id !== id);
         this.blockers = this.blockers.filter((b) => b.id !== id);
       }
@@ -1673,6 +1798,7 @@ export class IslandWorld {
       if (!state.plots.some((plot) => plot.id === id)) {
         this.scene.remove(p.group);
         this.plantGroups.delete(id);
+        changed = true;
         this.entities = this.entities.filter((e) => e.id !== id);
       }
     }
@@ -1681,6 +1807,7 @@ export class IslandWorld {
       const model = this.placeObject(this.buildModel(b.type), b.x, b.z);
       model.rotation.y = b.rotation;
       this.placed.set(b.id, model);
+      changed = true;
       if (b.type !== 'garden' && b.type !== 'fence') {
         const kind: Entity['kind'] =
           b.type === 'cottage'
@@ -1717,6 +1844,7 @@ export class IslandWorld {
         this.scene.remove(existing.group);
         this.entities = this.entities.filter((e) => e.id !== p.id);
       }
+      changed = true;
       const g = new THREE.Group();
       const bed = this.addMesh(
         this.bedGeometry,
@@ -1776,6 +1904,7 @@ export class IslandWorld {
           );
       }
     }
+    if (changed) this.rebuildAimMeshes();
     this.equipTool();
     for (const e of this.entities) {
       if (
@@ -1821,18 +1950,6 @@ export class IslandWorld {
         }
       }
   }
-  recenter() {
-    const p = this.player.position;
-    this.target.set(p.x, 0, p.z);
-    this.cameraAngle = 0.65;
-    this.zoom = 16;
-    this.resize();
-  }
-  travelHint(place: keyof typeof targets) {
-    const [x, z] = targets[place];
-    this.destination = new THREE.Vector3(x, 0, z);
-    this.destinationEntity = null;
-  }
   private tick = (stamp: number) => {
     const dt = Math.min((stamp - this.last) / 1000 || 0.016, 0.05);
     this.last = stamp;
@@ -1841,37 +1958,22 @@ export class IslandWorld {
     const s = this.state();
     if (!this.paused) {
       s.elapsed += dt;
-      let mx = 0,
-        mz = 0;
-      if (this.keys.has('KeyW') || this.keys.has('ArrowUp')) mz--;
-      if (this.keys.has('KeyS') || this.keys.has('ArrowDown')) mz++;
-      if (this.keys.has('KeyA') || this.keys.has('ArrowLeft')) mx--;
-      if (this.keys.has('KeyD') || this.keys.has('ArrowRight')) mx++;
-      let dx =
-          mx * Math.cos(this.cameraAngle) + mz * Math.sin(this.cameraAngle),
-        dz = -mx * Math.sin(this.cameraAngle) + mz * Math.cos(this.cameraAngle);
-      if (mx || mz) {
-        this.destination = null;
-        this.marker.visible = false;
-      } else if (this.destination) {
-        dx = this.destination.x - this.player.position.x;
-        dz = this.destination.z - this.player.position.z;
-        const stop = this.destinationEntity
-          ? 2.1 + this.destinationEntity.radius
-          : 0.2;
-        if (Math.hypot(dx, dz) < stop) {
-          if (this.destinationEntity) {
-            this.events.interact(this.destinationEntity);
-            this.swing = 0.4;
-          }
-          this.destination = null;
-          this.destinationEntity = null;
-          this.marker.visible = false;
-          dx = dz = 0;
-        }
-      }
+      let strafe = 0,
+        forward = 0;
+      if (this.keys.has('KeyW')) forward++;
+      if (this.keys.has('KeyS')) forward--;
+      if (this.keys.has('KeyA')) strafe--;
+      if (this.keys.has('KeyD')) strafe++;
+      const turnRate = 90 * dt;
+      if (this.keys.has('ArrowLeft')) this.turn(-turnRate * 6, 0);
+      if (this.keys.has('ArrowRight')) this.turn(turnRate * 6, 0);
+      if (this.keys.has('ArrowUp')) this.turn(0, -turnRate * 6);
+      if (this.keys.has('ArrowDown')) this.turn(0, turnRate * 6);
+      let { x: dx, z: dz } = walkDirection(s.view.yaw, strafe, forward);
       const moving = Math.hypot(dx, dz) > 0.01,
-        sprint = this.keys.has('ShiftLeft') && this.stamina > 8;
+        sprint =
+          (this.keys.has('ShiftLeft') || this.keys.has('ShiftRight')) &&
+          this.stamina > 8;
       this.stamina = THREE.MathUtils.clamp(
         this.stamina + (moving && sprint ? -15 : 14) * dt,
         0,
@@ -1879,31 +1981,17 @@ export class IslandWorld {
       );
       if (moving) {
         const len = Math.hypot(dx, dz),
-          speed = (sprint ? 7 : 4.6) * dt;
+          speed = (sprint ? 5.8 : 3.6) * dt;
         dx = (dx / len) * speed;
         dz = (dz / len) * speed;
         const p = this.player.position;
         const allowed = (x: number, z: number) => this.walkable(x, z);
-        let moved = false;
         if (allowed(p.x + dx, p.z)) {
           p.x += dx;
-          moved = true;
         }
         if (allowed(p.x, p.z + dz)) {
           p.z += dz;
-          moved = true;
         }
-        if (!moved && this.destination) {
-          this.destination = null;
-          this.destinationEntity = null;
-          this.marker.visible = false;
-        }
-        const angle = Math.atan2(dx, dz);
-        this.player.rotation.y +=
-          Math.atan2(
-            Math.sin(angle - this.player.rotation.y),
-            Math.cos(angle - this.player.rotation.y),
-          ) * Math.min(1, dt * 12);
       }
       if (this.jumpSpeed !== 0 || this.jump > 0) {
         this.jumpSpeed -= 14 * dt;
@@ -1911,52 +1999,46 @@ export class IslandWorld {
         if (this.jump === 0) this.jumpSpeed = 0;
       }
       this.player.position.y =
-        heightAt(this.player.position.x, this.player.position.z) +
-        this.jump +
-        (moving
-          ? Math.abs(Math.sin(this.clock * 12)) * 0.065
-          : Math.sin(this.clock * 2) * 0.015);
-      for (const [name, phase] of [
-        ['leftLeg', 0],
-        ['rightLeg', Math.PI],
-        ['leftArm', Math.PI],
-        ['rightArm', 0],
-      ] as const) {
-        const limb = this.player.getObjectByName(name);
-        if (limb)
-          limb.rotation.x = moving
-            ? Math.sin(this.clock * (sprint ? 16 : 11) + phase) * 0.6
-            : Math.sin(this.clock * 2 + phase) * 0.04;
-      }
-      if (this.swing > 0) {
-        this.swing -= dt;
-        const arm = this.player.getObjectByName('rightArm');
-        if (arm) arm.rotation.x = -Math.sin(this.swing * 14) * 1.5;
+        heightAt(this.player.position.x, this.player.position.z) + this.jump;
+      s.player = { x: this.player.position.x, z: this.player.position.z };
+      this.headOffset =
+        s.view.bob && moving
+          ? Math.sin(this.clock * (sprint ? 13 : 9)) * 0.025
+          : 0;
+      this.camera.position.set(
+        s.player.x,
+        this.player.position.y + EYE_HEIGHT + this.headOffset,
+        s.player.z,
+      );
+      this.camera.rotation.set(s.view.pitch, s.view.yaw, 0, 'YXZ');
+      if (this.swing > 0) this.swing = Math.max(0, this.swing - dt);
+      const swing = Math.sin((this.swing / 0.42) * Math.PI);
+      this.handRig.position.set(
+        moving ? Math.sin(this.clock * 7) * 0.012 : 0,
+        -swing * 0.06 +
+          (moving ? Math.abs(Math.sin(this.clock * 7)) * 0.008 : 0),
+        -swing * 0.14,
+      );
+      this.handRig.rotation.set(-swing * 0.3, 0, swing * 0.12);
+      if (this.clock - this.lastAim > 0.065) {
+        this.updateFocus();
+        this.lastAim = this.clock;
       }
       if (this.clock - this.lastUi > 0.16) {
         s.player = { x: this.player.position.x, z: this.player.position.z };
         this.events.move(s.player.x, s.player.z, this.stamina);
-        let best: Entity | null = null,
-          dist = Infinity;
-        for (const e of this.entities) {
-          if (!e.object.visible) continue;
-          const d = Math.hypot(e.x - s.player.x, e.z - s.player.z) - e.radius;
-          if (d < 2.7 && d < dist) {
-            best = e;
-            dist = d;
-          }
-        }
-        if (this.near !== best) {
-          this.near = best;
-          this.events.near(best);
-        }
         this.lastUi = this.clock;
         this.sync();
       }
     }
-    if (this.buildType && !this.paused) {
+    if (
+      this.buildType &&
+      !this.paused &&
+      this.clock - this.lastBuildAim > 0.05
+    ) {
       this.updateGrid();
       this.updateGhost();
+      this.lastBuildAim = this.clock;
     }
     this.sun.position.set(
       this.player.position.x - 18,
@@ -1968,20 +2050,17 @@ export class IslandWorld {
       0,
       this.player.position.z,
     );
-    const goal = !s.started
-      ? new THREE.Vector3(0, 0, 2)
-      : new THREE.Vector3(
-          this.player.position.x,
-          0,
-          this.player.position.z - 1,
-        );
-    this.target.lerp(goal, 1 - Math.exp(-dt * 2));
-    this.camera.position.set(
-      this.target.x + Math.sin(this.cameraAngle) * 38,
-      32,
-      this.target.z + Math.cos(this.cameraAngle) * 38,
-    );
-    this.camera.lookAt(this.target.x, 0.4, this.target.z);
+    if (!s.started) {
+      this.camera.position.set(22, 18, 28);
+      this.camera.lookAt(0, 1, 3);
+    } else if (this.paused) {
+      this.camera.position.set(
+        this.player.position.x,
+        this.player.position.y + EYE_HEIGHT + this.headOffset,
+        this.player.position.z,
+      );
+      this.camera.rotation.set(s.view.pitch, s.view.yaw, 0, 'YXZ');
+    }
     const rotor = this.windmill.getObjectByName('rotor');
     if (rotor) rotor.rotation.z = -this.clock * 0.18;
     this.goose.rotation.y = 0.5 + Math.sin(this.clock * 0.55) * 0.2;
@@ -2020,10 +2099,17 @@ export class IslandWorld {
     this.sun.intensity = 3.3 * daylight;
     this.ambient.intensity = 1.7 + daylight * 0.45;
     this.renderer.render(this.scene, this.camera);
+    if (s.started) {
+      this.renderer.autoClear = false;
+      this.renderer.clearDepth();
+      this.renderer.render(this.viewScene, this.viewCamera);
+      this.renderer.autoClear = true;
+    }
     this.frame = requestAnimationFrame(this.tick);
   };
   dispose() {
     cancelAnimationFrame(this.frame);
+    this.releaseLook();
     this.abort.abort();
     this.resizeObserver.disconnect();
     const geos = new Set<THREE.BufferGeometry>(),
@@ -2045,6 +2131,7 @@ export class IslandWorld {
     mats.forEach((m) => m.dispose());
     disposeAssetLibrary();
     disposeExtraModelLibrary();
+    disposeFirstPersonModels();
     this.renderer.dispose();
     this.renderer.domElement.remove();
   }
