@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1788621765009,
+      "tag": "0000_premium_hawkeye",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1788622015898,
+      "tag": "0001_gifted_la_nuit",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1788622521446,
+      "tag": "0002_remarkable_sabretooth",
+      "breakpoints": true
+    }
+  ]
+}

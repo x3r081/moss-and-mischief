@@ -2910,3 +2910,150 @@ kbd {
 .mouse-captured .build-hint {
   pointer-events: none;
 }
+
+/* The Department of Mild Peril */
+.survival-hud {
+  position: absolute;
+  left: 34px;
+  bottom: 172px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  max-width: 310px;
+  padding: 12px 15px;
+  border: 1px solid #a6cbaa44;
+  border-radius: 12px;
+  background: #163d36df;
+  color: #eee4c5;
+  pointer-events: none;
+  font-size: 14px;
+}
+.survival-hud span {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+}
+.survival-hud small {
+  width: 100%;
+  color: #aecaaa;
+}
+.survival-hud b {
+  color: #efcc72;
+}
+.survival-hud .danger,
+.survival-hud .danger b {
+  color: #ffab84;
+}
+.survival-hud kbd {
+  font-size: 11px;
+  opacity: 0.6;
+}
+.frontier-heading {
+  display: flex;
+  gap: 15px;
+  align-items: center;
+  margin: 0 0 20px;
+  color: #efd795;
+}
+.frontier-heading h3 {
+  margin: 0;
+  font:
+    24px Georgia,
+    serif;
+}
+.frontier-heading p {
+  color: #c2d0bb;
+  margin: 7px 0;
+  font-size: 15px;
+}
+.frontier-panel [data-slot='tabs-list'] {
+  flex-wrap: wrap;
+  height: auto;
+  gap: 4px;
+}
+.frontier-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(235px, 1fr));
+  gap: 14px;
+  margin-top: 16px;
+}
+.frontier-cards article {
+  border: 1px solid #cbd9ae30;
+  border-radius: 13px;
+  padding: 20px;
+  background: #21483c;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.frontier-cards article.selected {
+  border-color: #eac46d;
+}
+.frontier-cards h3 {
+  margin: 0;
+  font:
+    21px Georgia,
+    serif;
+  color: #f0deac;
+}
+.frontier-cards p {
+  color: #c5d3bb;
+  font-size: 15px;
+  line-height: 1.5;
+  margin: 0;
+}
+.frontier-cards strong {
+  font-size: 14px;
+  color: #b1c79e;
+}
+.frontier-price {
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  color: #b5d69c;
+}
+.frontier-price span {
+  background: #17372e;
+  padding: 5px 8px;
+  border-radius: 5px;
+}
+.frontier-price .short {
+  color: #efa686;
+}
+.frontier-cards button,
+.frontier-drink {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 15px;
+  border: 1px solid #bdd49344;
+  border-radius: 8px;
+  background: #c9d899;
+  color: #193c32;
+  font-weight: 700;
+}
+.frontier-cards button:disabled {
+  opacity: 0.45;
+}
+.frontier-panel .panel-note {
+  font-size: 15px;
+  line-height: 1.6;
+}
+@media (max-width: 700px) {
+  .survival-hud {
+    left: 12px;
+    bottom: 142px;
+    font-size: 12px;
+    gap: 8px;
+    max-width: 250px;
+    padding: 9px;
+  }
+  .frontier-cards {
+    grid-template-columns: 1fr;
+  }
+}
+
+.coop-panel {display:grid;gap:18px}.coop-label {display:grid;gap:8px;font-size:14px}.coop-label input {width:100%;border:1px solid #78977c;border-radius:10px;padding:12px;background:#f7f7e8;color:#203b2d;font:inherit}.coop-error {background:#ffe1ca;border-radius:10px;padding:12px;color:#6e321e}.coop-panel .muted{font-size:13px;line-height:1.6;opacity:.75}.coop-panel h3 {overflow-wrap:anywhere}

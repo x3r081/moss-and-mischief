@@ -1,3 +1,22 @@
+import {
+  ANIMALS,
+  EXPEDITIONS,
+  LANDMARKS,
+  advanceSurvival,
+  discoverLandmark,
+  eatFood,
+  expedition,
+  expeditionProgress,
+  gearCost,
+  huntAnimal,
+  openTreasure,
+  upgradeBuilding,
+  upgradeCost,
+  upgradeGear,
+  drinkWater,
+  type AnimalKind,
+  type Gear,
+} from '../lib/game/frontier';
 /* oxlint-disable typescript/no-explicit-any -- Tests intentionally construct malformed untrusted saves. */
 /* oxlint-disable import/namespace -- Exercise every named procedural asset factory with the same contract. */
 import test from 'node:test';
@@ -107,10 +126,11 @@ void test('crafting requires a station even when ingredients exist', () => {
   const s = initialState();
   s.inventory.wood = 100;
   s.inventory.carrot = 12;
+  const breadBefore = s.inventory.bread;
   craft(s, 'plank');
   craft(s, 'bread');
   assert.equal(s.inventory.plank, 0);
-  assert.equal(s.inventory.bread, 0);
+  assert.equal(s.inventory.bread, breadBefore);
 });
 void test('gathering obeys respawn time and is renewable', () => {
   const s = initialState();
@@ -492,7 +512,7 @@ void test('completed legacy saves preserve homestead and continue at quest seven
     delete old[k];
   const s = parseSave(JSON.stringify(old))!;
   assert.ok(s);
-  assert.equal(s.version, 2);
+  assert.equal(s.version, 3);
   assert.equal(s.won, false);
   assert.equal(s.projects.lighthouse, true);
   assert.equal(s.buildings[0].id, 'original-cottage');
@@ -593,18 +613,46 @@ void test('all expansion models have finite grounded geometry inside placement f
     assert.ok(Math.abs(b.min.y) < 0.002);
   }
 });
-void test('all 36 quests can be completed in order with real actions and unlocked dependency chains', () => {
+void test('all 72 quests can be completed in order with real actions and unlocked dependency chains', () => {
   const s = initialState();
   s.started = true;
   let time = 1000000,
     id = 0;
   const stock = (resource: Resource, amount: number) => {
     if (s.inventory[resource] >= amount) return;
+    if (resource === 'rawmeat' || resource === 'hide') {
+      huntStock(resource, amount);
+      return;
+    }
+    if (resource === 'ancientcoin') {
+      treasureCounter(
+        (s.counters.treasure ?? 0) +
+          Math.ceil((amount - s.inventory.ancientcoin) / 2),
+      );
+      return;
+    }
+    if (resource === 'coins') {
+      station('market');
+      while (s.inventory.coins < amount) {
+        stock('carrot', 1);
+        trade(s, 'carrot', true);
+      }
+      return;
+    }
     const needed = amount - s.inventory[resource];
     if (
-      ['wood', 'stone', 'fiber', 'clay', 'ore', 'mushroom', 'apple'].includes(
-        resource,
-      )
+      [
+        'wood',
+        'stone',
+        'fiber',
+        'clay',
+        'ore',
+        'mushroom',
+        'apple',
+        'berries',
+        'herbs',
+        'salt',
+      ].includes(resource)
     ) {
       s.tool =
         resource === 'wood'
@@ -671,7 +719,7 @@ void test('all 36 quests can be completed in order with real actions and unlocke
         s.completed.length >= r.unlock,
         `${resource} locked at quest ${s.completed.length + 1}`,
       );
-      if (r.station) station(r.station);
+      if (r.station) ensureBuildingLevel(r.station, r.stationLevel ?? 1);
       for (const [k, n] of Object.entries(r.cost))
         stock(k as Resource, n! * needed);
       let left = needed;
@@ -679,7 +727,7 @@ void test('all 36 quests can be completed in order with real actions and unlocke
         const n = Math.min(left, 20),
           before: number = s.inventory[resource];
         craft(s, resource as Craftable, n);
-        assert.equal(s.inventory[resource], before + n, resource);
+        assert.ok(s.inventory[resource] >= before + n, resource);
         left -= n;
       }
     }
@@ -698,10 +746,90 @@ void test('all 36 quests can be completed in order with real actions and unlocke
       type,
     );
   };
+  const ensureBuildingLevel = (type: Structure, target: number) => {
+    station(type);
+    const b = s.buildings.find((b) => b.type === type)!;
+    while ((b.level ?? 1) < target) {
+      for (const [r, n] of Object.entries(upgradeCost(b)))
+        stock(r as Resource, n!);
+      const old = b.level ?? 1;
+      upgradeBuilding(s, b.id);
+      assert.equal(b.level, old + 1, `upgrade ${type}`);
+    }
+  };
+  const ensureGearLevel = (gear: Gear, target: number) => {
+    while (s.frontier.gear[gear] < target) {
+      const level = s.frontier.gear[gear];
+      ensureBuildingLevel('workbench', level === 0 ? 1 : level === 1 ? 2 : 3);
+      while (
+        !Object.entries(gearCost(s, gear)).every(
+          ([r, n]) => s.inventory[r as Resource] >= n!,
+        )
+      )
+        for (const [r, n] of Object.entries(gearCost(s, gear)))
+          stock(r as Resource, n!);
+      upgradeGear(s, gear);
+      assert.equal(s.frontier.gear[gear], level + 1, gear);
+    }
+  };
+  const huntCounter = (kind: AnimalKind | undefined, target: number) => {
+    ensureGearLevel('spear', 1);
+    const key = kind ? `hunt:${kind}` : 'hunt';
+    const animal = ANIMALS.find((a) => !kind || a.kind === kind)!;
+    while ((s.counters[key] ?? 0) < target) {
+      time += 90001;
+      s.tool = 'spear';
+      const before = s.counters[key] ?? 0;
+      for (let hit = 0; hit < 5 && (s.counters[key] ?? 0) === before; hit++)
+        huntAnimal(s, animal.id, time++);
+      assert.ok((s.counters[key] ?? 0) > before, key);
+    }
+  };
+  const huntStock = (resource: 'rawmeat' | 'hide', amount: number) => {
+    while (s.inventory[resource] < amount)
+      huntCounter('boar', (s.counters['hunt:boar'] ?? 0) + 1);
+  };
+  const treasureCounter = (target: number) => {
+    let i = 0;
+    while ((s.counters.treasure ?? 0) < target) {
+      const landmark = LANDMARKS[i++ % LANDMARKS.length];
+      discoverLandmark(s, landmark.id);
+      time += 300001;
+      const before = s.counters.treasure ?? 0;
+      openTreasure(s, `cache-${landmark.id}`, time++);
+      assert.ok((s.counters.treasure ?? 0) > before);
+    }
+  };
+  const craftCounter = (recipe: Craftable, target: number) => {
+    while ((s.counters[`craft:${recipe}`] ?? 0) < target) {
+      const before = s.counters[`craft:${recipe}`] ?? 0;
+      stock(recipe, s.inventory[recipe] + 1);
+      assert.ok((s.counters[`craft:${recipe}`] ?? 0) > before, recipe);
+    }
+  };
+  const completeExpedition = (id: string) => {
+    const job = EXPEDITIONS.find((e) => e.id === id)!;
+    assert.ok(job, id);
+    expedition(s, id);
+    const target = (s.counters[job.key] ?? 0) + job.target;
+    if (job.key === 'treasure') treasureCounter(target);
+    else if (job.key === 'hunt') huntCounter(undefined, target);
+    else if (job.key.startsWith('craft:'))
+      craftCounter(job.key.slice(6) as Craftable, target);
+    else {
+      const resource = job.key.slice(7) as Resource;
+      stock(resource, s.inventory[resource] + job.target);
+    }
+    assert.equal(expeditionProgress(s), job.target, id);
+    assert.match(expedition(s, id), /complete/);
+  };
   for (let i = 0; i < QUESTS.length; i++) {
+    if (s.completed.includes(i)) continue;
     assert.equal(s.completed.length, i, `at quest ${i + 1}`);
     for (const o of QUESTS[i].objectives) {
-      const [verb, key] = o.key.split(':');
+      if (count(s, o.key) >= o.target) continue;
+      const [verb, ...parts] = o.key.split(':');
+      const key = parts.join(':');
       if (verb === 'talk') talk(s, key as Npc);
       else if (verb === 'visit') s.counters[o.key] = 1;
       else if (verb === 'build') {
@@ -721,6 +849,43 @@ void test('all 36 quests can be completed in order with real actions and unlocke
       } else if (o.key === 'relics') {
         s.tool = 'hands';
         for (const r of RELIC_LOCATIONS) collectRelic(s, r.id);
+      } else if (verb === 'craft') craftCounter(key as Craftable, o.target);
+      else if (verb === 'hunt') huntCounter(key as AnimalKind, o.target);
+      else if (verb === 'discover') {
+        if (key) discoverLandmark(s, key);
+        else
+          for (const l of LANDMARKS) {
+            if ((s.counters.discover ?? 0) >= o.target) break;
+            discoverLandmark(s, l.id);
+          }
+      } else if (verb === 'treasure') treasureCounter(o.target);
+      else if (verb === 'expedition') {
+        while ((s.counters[o.key] ?? 0) < o.target) completeExpedition(key);
+      } else if (verb === 'upgrade') {
+        const [kind, level] = key.split(':');
+        ensureBuildingLevel(kind as Structure, Number(level));
+      } else if (verb === 'gear') {
+        const [gear, level] = key.split(':');
+        ensureGearLevel(gear as Gear, Number(level));
+      } else if (verb === 'eat') {
+        while ((s.counters[o.key] ?? 0) < o.target) {
+          stock(key as Resource, 1);
+          eatFood(s, key as Resource);
+        }
+      } else if (verb === 'drink') {
+        while ((s.counters.drink ?? 0) < o.target) {
+          s.frontier.needs.thirst = 50;
+          drinkWater(s, true);
+        }
+      } else if (verb === 'survival') {
+        while (s.frontier.needs.activeTime < o.target * 600) {
+          if (s.frontier.needs.hunger < 30) {
+            stock('cookedmeat', 1);
+            eatFood(s, 'cookedmeat');
+          }
+          if (s.frontier.needs.thirst < 30) drinkWater(s, true);
+          advanceSurvival(s, 5);
+        }
       } else {
         const r = key as Resource,
           need = Math.max(0, o.target - count(s, o.key));
@@ -732,7 +897,7 @@ void test('all 36 quests can be completed in order with real actions and unlocke
     assert.ok(s.completed.includes(i), QUESTS[i].title);
     assert.ok(Object.values(s.inventory).every((n) => n >= 0));
   }
-  assert.equal(s.completed.length, 36);
+  assert.equal(s.completed.length, 72);
   assert.equal(s.won, true);
   assert.ok(
     parseSave(
@@ -742,7 +907,7 @@ void test('all 36 quests can be completed in order with real actions and unlocke
       }),
     ),
   );
-  assert.equal(CONTRACTS.length, 12);
+  assert.equal(CONTRACTS.length, 24);
 });
 void test('expanded island has walkable routes to every resident, relic and project', () => {
   const s = initialState();

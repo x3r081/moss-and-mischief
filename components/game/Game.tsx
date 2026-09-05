@@ -1,4 +1,9 @@
 'use client';
+import { type Gear } from '@/lib/game/frontier';
+import { applyCommand, type GameCommand } from '@/lib/game/commands';
+import { CampClient, mergeCamp, type CampUpdate } from '@/lib/game/camp';
+import MultiplayerPanel from './MultiplayerPanel';
+import type { FrontierAction } from './FrontierPanel';
 import { interactionSnapshot } from '@/lib/game/interactions';
 import {
   harvestedLabel,
@@ -51,22 +56,8 @@ import {
   readSave,
   saveGame,
   parseSave,
-  dismantle,
-  gather,
-  farm,
-  build,
-  craft,
-  restoreLighthouse,
-  talk,
-  fish,
-  collectRelic,
-  tendProduction,
-  completeContract,
-  trade,
-  performProject,
-  requiredTool,
-  toolError,
   TOOL_NAMES,
+  requiredTool,
   CROPS,
   NPCS,
   REGIONS,
@@ -75,7 +66,6 @@ import {
   addCount,
   type Crop,
   type Npc,
-  type Project,
   type Craftable,
   updateQuests,
   currentQuest,
@@ -106,6 +96,7 @@ const toolset: [Tool, string, typeof Axe][] = [
   ['build', 'Build', Hammer],
   ['hands', 'Hands', Hand],
   ['rod', 'Fish', Fish],
+  ['spear', 'Hunt', ArrowUpRight],
 ];
 export default function Game() {
   const host = useRef<HTMLDivElement>(null),
@@ -127,6 +118,12 @@ export default function Game() {
     [speaker, setSpeaker] = useState('Mayor Honk'),
     [win, setWin] = useState(false),
     [saveOk, setSaveOk] = useState(true);
+  const campClient = useRef<CampClient | null>(null),
+    solo = useRef<GameState | null>(null);
+  const [camp, setCamp] = useState<CampUpdate | null>(null),
+    [campBusy, setCampBusy] = useState(false),
+    [campError, setCampError] = useState('');
+  const pending = useRef(0);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const audio = useRef<IslandAudio | null>(null);
   const notify = (text: string) => {
@@ -135,12 +132,13 @@ export default function Game() {
     toastTimer.current = setTimeout(() => setToast(''), 4500);
   };
   const refresh = () => {
-    const complete = updateQuests(data.current);
+    const complete = campClient.current?.code ? [] : updateQuests(data.current);
     if (complete.length && data.current.started) audio.current?.effect('build');
     world.current?.sync();
     setSnapshot(structuredClone(data.current));
   };
   const persist = () => {
+    if (campClient.current?.code) return true;
     const saved = saveGame(data.current);
     setSaveOk(saved);
     if (!saved)
@@ -156,104 +154,170 @@ export default function Game() {
     if (tool === 'build' && openPlans) setPanel('build');
     refresh();
   };
-  const act = (entity: Entity, actionTime?: number) => {
-    const s = data.current,
-      needed = requiredTool(s, entity.kind, entity.id);
-    if (needed && s.tool !== needed) {
-      notify(toolError(s, needed));
+  const acceptCamp = (update: CampUpdate) => {
+    const client = campClient.current;
+    if (
+      !client ||
+      update.code !== client.code ||
+      update.revision < client.revision
+    )
+      return;
+    if (update.state) data.current = mergeCamp(data.current, update.state);
+    if (update.needs) data.current.frontier.needs = update.needs;
+    if (update.rescued && update.position) {
+      data.current.player = { x: update.position.x, z: update.position.z };
+      world.current?.relocate();
+      notify(
+        'The goose ambulance brought you home. Group insurance covered the bill.',
+      );
+    }
+    client.revision = update.revision;
+    world.current?.setPeers(update.peers.filter((p) => p.id !== client.id));
+    setCamp(update);
+    setCampError('');
+    refresh();
+  };
+  const perform = async (command: GameCommand) => {
+    const client = campClient.current;
+    const wasWon = data.current.won;
+    if (command.type === 'drink' && data.current.frontier.needs.canteen < 1) {
+      notify('Empty canteen. Refill at the village spring or a well.');
       return false;
     }
-    let message = '';
-    const wasWon = s.won;
-    const before = interactionSnapshot(s, entity.id);
-    if (
-      ['wood', 'stone', 'fiber', 'ore', 'clay', 'mushroom', 'apple'].includes(
-        entity.kind,
-      )
-    )
-      message = gather(
-        s,
-        entity.id,
-        entity.kind as Parameters<typeof gather>[2],
-      );
-    else if (entity.kind === 'plot') message = farm(s, entity.id);
-    else if (entity.kind === 'goose' || entity.kind === 'npc') {
-      const npc = entity.id as Npc;
-      talk(s, npc);
-      const quest = QUESTS[currentQuest(s)];
-      setSpeaker(NPCS[npc].name);
-      const advice: Record<Npc, string> = {
-        mayor: quest.quote,
-        ranger:
-          'Build a ranger’s shed, then pick mushrooms with your hands. If one introduces itself, leave it alone.',
-        fisher:
-          'Equip the rod (7) at a fishing marker. E casts one seed as bait. Wait for BITE, then E reels it in. My doctorate is in standing near water.',
-        smith:
-          'Clay and copper ore surround the quarry. Pickaxe first. Build a kiln for bricks, then a forge for ingots. Please stop calling it spicy furniture.',
-        botanist:
-          'Pick apples in the orchard. Your seed pouch can also grow wheat, pumpkin and lavender as you progress. A greenhouse waters nearby crops.',
-        astronomer:
-          'Repair the highland bridge, recover four relics, and open the ancient gate. An observatory needs starglass. Yes, the stars have a materials budget.',
-        baker:
-          'Flour, pumpkin, eggs, honey: the four food groups of pie. Meet residents and deliver their requests from your journal. I pay in acorns; banks remain confused.',
-      };
-      setDialogue(
-        quest.npc === npc ? quest.quote + ' ' + quest.detail : advice[npc],
-      );
-    } else if (entity.kind === 'crystal') {
-      if (!s.stats.explored) {
-        s.inventory.crystal++;
-        s.stats.explored = true;
-        addCount(s, 'gather:crystal');
-        message =
-          'Sun crystal recovered. An excellent start to a suspicious collection.';
+    pending.current++;
+    setCampBusy(true);
+    try {
+      let changed: boolean, message: string;
+      if (client?.code) {
+        const result = await client.action(
+          command,
+          data.current,
+          !world.current?.paused,
+        );
+        if (campClient.current !== client) return false;
+        acceptCamp(result);
+        changed = !!result.changed;
+        message = result.message ?? '';
+      } else {
+        const before = JSON.stringify(data.current);
+        message = applyCommand(data.current, command);
+        changed = before !== JSON.stringify(data.current);
       }
-    } else if (entity.kind === 'lighthouse') message = restoreLighthouse(s);
-    else if (entity.kind === 'project')
-      message = performProject(s, entity.id as Project);
-    else if (entity.kind === 'fish') message = fish(s, entity.id, actionTime);
-    else if (entity.kind === 'relic') message = collectRelic(s, entity.id);
-    else if (entity.kind === 'spring') {
-      s.water = 24;
-      message =
-        'Watering can refilled · 24 uses. Please do not water the mayor.';
-    } else if (entity.kind === 'production')
-      message = tendProduction(s, entity.id);
-    else if (['workbench', 'campfire', 'station'].includes(entity.kind))
-      setPanel('craft');
-    else if (entity.kind === 'market') setPanel('market');
-    else if (entity.kind === 'cottage') {
-      world.current!.stamina = 100;
-      message = 'Home sweet home. Energy restored.';
-    } else if (entity.kind === 'chest') {
-      if ((s.depleted.supplies ?? 0) < Date.now()) {
-        for (const r of ['wood', 'stone', 'fiber'] as const)
-          s.inventory[r] += 2;
-        s.depleted.supplies = Date.now() + 60000;
-        message =
-          '+2 timber · +2 stone · +2 fiber. The sea has excellent delivery service.';
-      } else message = 'More supplies arrive in a minute.';
+      if (message) notify(message);
+      refresh();
+      persist();
+      if (!wasWon && data.current.won) {
+        setWin(true);
+        audio.current?.effect('win');
+      }
+      return changed;
+    } catch (e) {
+      const message =
+        e instanceof Error
+          ? e.message
+          : 'Camp connection lost. Please try again.';
+      setCampError(message);
+      notify(message);
+      return false;
+    } finally {
+      pending.current--;
+      setCampBusy(pending.current > 0);
     }
-    const changed = before !== interactionSnapshot(s, entity.id);
-    if (changed || entity.kind === 'goose' || entity.kind === 'npc')
-      audio.current?.effect(
-        entity.kind === 'goose'
-          ? 'honk'
-          : entity.kind === 'wood'
-            ? 'chop'
-            : ['stone', 'clay', 'ore'].includes(entity.kind)
-              ? 'mine'
-              : entity.kind === 'plot'
-                ? 'farm'
-                : 'gather',
+  };
+  const enterCamp = async (
+    op: 'create' | 'join',
+    name: string,
+    code: string,
+  ) => {
+    setCampBusy(true);
+    setCampError('');
+    try {
+      persist();
+      const client = new CampClient();
+      const result = await client.enter(op, name, data.current, code);
+      solo.current = structuredClone(data.current);
+      if (world.current) world.current.multiplayer = true;
+      campClient.current = client;
+      data.current.player = result.position
+        ? { x: result.position.x, z: result.position.z }
+        : { x: 0, z: 7 };
+      acceptCamp(result);
+      world.current?.relocate();
+      notify(
+        'Camp connected. Your crew shares the pantry. Label your sandwiches.',
       );
-    if (message) notify(message);
+    } catch (e) {
+      setCampError(e instanceof Error ? e.message : 'Could not reach camp.');
+    } finally {
+      setCampBusy(false);
+    }
+  };
+  const leaveCamp = async () => {
+    if (pending.current) return;
+    const client = campClient.current;
+    campClient.current = null;
+    if (solo.current) data.current = solo.current;
+    solo.current = null;
+    setCamp(null);
+    if (world.current) world.current.multiplayer = false;
+    world.current?.setPeers([]);
+    world.current?.relocate();
     refresh();
     persist();
-    if (!wasWon && s.won) {
-      setWin(true);
-      audio.current?.effect('win');
+    try {
+      await client?.leave();
+    } catch {
+      /* Presence expires automatically after 15 seconds. */
     }
+    notify('Back on your solo island. Keep the camp code to rejoin your crew.');
+  };
+  const act = async (entity: Entity, actionTime?: number) => {
+    const before = interactionSnapshot(data.current, entity.id);
+    const changed = await perform({
+      type: 'interact',
+      id: entity.id,
+      kind: entity.kind,
+      x: entity.x,
+      z: entity.z,
+      actionTime,
+    });
+    if (entity.kind === 'npc' || entity.kind === 'goose') {
+      const npc = entity.id as Npc,
+        quest = QUESTS[currentQuest(data.current)];
+      setSpeaker(NPCS[npc].name);
+      const tips: Record<Npc, string> = {
+        mayor:
+          'The Department of Mild Peril is open (U). Bring a friend to camp (L). I shall supervise from a safe distance.',
+        ranger:
+          'Craft a spear at your workbench using Upgrades (U). Rabbits are easier than boars. Boars have lawyers. An upgraded shed improves hunting damage.',
+        fisher:
+          'Equip the rod (7). E casts one seed as bait; wait for BITE, then E reels. Fishing is just waiting with better trousers.',
+        smith:
+          'A level 2 forge makes steel. Upgrade your workbench for leather, rope and machinery. Your next axe deserves a promotion.',
+        botanist:
+          'Greenhouse upgrades water a wider area and speed growth. Forage berries, herbs and salt for meals. Please stop asking the lavender for career advice.',
+        astronomer:
+          'Find eight landmarks and inspect their caches. Field notes (U) give directions. The northern routes need a bridge and the ancient gate opened.',
+        baker:
+          'F eats a packed meal; G drinks from your canteen. Cook wild meat first. Tea quenches thirst. Your stomach has a strict complaints department.',
+      };
+      setDialogue(
+        quest.npc === npc ? quest.quote + ' ' + quest.detail : tips[npc],
+      );
+    }
+    if (['workbench', 'campfire', 'station'].includes(entity.kind))
+      setPanel('craft');
+    if (entity.kind === 'market') setPanel('market');
+    if (entity.kind === 'cottage' && changed && world.current)
+      world.current.stamina = 100;
+    if (before !== interactionSnapshot(data.current, entity.id))
+      audio.current?.effect(
+        entity.kind === 'wood'
+          ? 'chop'
+          : ['stone', 'ore', 'clay'].includes(entity.kind)
+            ? 'mine'
+            : 'gather',
+      );
     return changed;
   };
   useEffect(() => {
@@ -269,17 +333,51 @@ export default function Game() {
         look: setLookMode,
         placement: (valid, message) => setPlacementInfo({ valid, message }),
         interact: act,
-        place: (type, x, z, rotation) => {
-          if (!instance.canPlace(type, x, z, rotation)) return;
-          notify(build(data.current, type, x, z, rotation));
-          audio.current?.effect('build');
-          setPlacing(null);
-          data.current.tool = 'build';
-          refresh();
-          persist();
+        place: async (type, x, z, rotation) => {
+          if (!instance.canPlace(type, x, z, rotation)) return false;
+          const changed = await perform({
+            type: 'build',
+            structure: type,
+            x,
+            z,
+            rotation,
+          });
+          if (changed) {
+            audio.current?.effect('build');
+            setPlacing(null);
+          }
+          return changed;
         },
         menu: (name) => {
-          if (name === 'cancel-build') {
+          if (name === 'quick-eat') {
+            const food = (
+              [
+                'trailration',
+                'roast',
+                'stew',
+                'cookedmeat',
+                'bread',
+                'apple',
+                'berries',
+                'carrot',
+              ] as Resource[]
+            ).find((r) => data.current.inventory[r] > 0);
+            if (food) void perform({ type: 'eat', food });
+            else
+              notify(
+                'No snacks! Forage berries or cook a meal. F eats, G drinks.',
+              );
+          } else if (name === 'drink') {
+            void perform({ type: 'drink' });
+          } else if (name === 'rescued') {
+            notify(
+              'Rescued by the Department of Mild Peril. Back at camp; 5 acorns for the goose ambulance.',
+            );
+            refresh();
+            persist();
+          } else if (name === 'boar-warning') {
+            notify('The boar has objected physically. Keep your distance!');
+          } else if (name === 'cancel-build') {
             setPlacing(null);
             data.current.tool = 'axe';
           } else if (name === 'cycle-crop') {
@@ -309,7 +407,10 @@ export default function Game() {
         },
         move: (x, z, e) => {
           const region = regionAt(x, z);
-          if (!data.current.counters[`visit:${region}`]) {
+          if (
+            !campClient.current?.code &&
+            !data.current.counters[`visit:${region}`]
+          ) {
             addCount(data.current, `visit:${region}`);
             updateQuests(data.current);
           }
@@ -328,10 +429,12 @@ export default function Game() {
       );
     }
     const saveInterval = setInterval(() => {
-      if (data.current.started) setSaveOk(saveGame(data.current));
+      if (data.current.started && !campClient.current?.code)
+        setSaveOk(saveGame(data.current));
     }, 10000);
     const unload = () => {
-      if (data.current.started) saveGame(data.current);
+      if (data.current.started && !campClient.current?.code)
+        saveGame(data.current);
     };
     window.addEventListener('pagehide', unload);
     return () => {
@@ -356,7 +459,35 @@ export default function Game() {
         refresh();
         persist();
       },
+      async (recipe) => ({
+        changed: await perform({ type: 'craft', recipe, amount: 1 }),
+        inventory: { ...data.current.inventory },
+      }),
     );
+  }, []);
+  useEffect(() => {
+    let stopped = false,
+      inFlight = false;
+    const timer = setInterval(async () => {
+      const client = campClient.current;
+      if (!client?.code || inFlight || pending.current) return;
+      inFlight = true;
+      try {
+        const update = await client.poll(data.current, !world.current?.paused);
+        if (!stopped && campClient.current === client) acceptCamp(update);
+      } catch (e) {
+        if (!stopped)
+          setCampError(
+            e instanceof Error ? e.message : 'Reconnecting to camp…',
+          );
+      } finally {
+        inFlight = false;
+      }
+    }, 1000);
+    return () => {
+      stopped = true;
+      clearInterval(timer);
+    };
   }, []);
   const start = () => {
     audio.current?.start();
@@ -393,6 +524,10 @@ export default function Game() {
     notify('A little island, safely packed. Save exported.');
   };
   const importSave = async (file: File) => {
+    if (campClient.current?.code) {
+      notify('Leave your shared camp before importing a solo island.');
+      return;
+    }
     if (file.size > 1_000_000) {
       notify('That save is too large. Choose a Bramblewick save file.');
       return;
@@ -425,13 +560,33 @@ export default function Game() {
           <Sun size={19} />
           <span>
             Day{' '}
-            {String(1 + Math.floor(snapshot.elapsed / 480)).padStart(2, '0')}
+            {String(
+              1 + Math.floor(snapshot.frontier.needs.activeTime / 600),
+            ).padStart(2, '0')}
           </span>
           <i />
           <span>Spring</span>
           <span className="weather-word"> · A fine day for nonsense</span>
         </div>
         <div className="header-actions">
+          {started && (
+            <>
+              <button
+                className="icon-button"
+                title="Equipment, workshops and expeditions · U"
+                onClick={() => setPanel('adventure')}
+              >
+                <Compass />
+              </button>
+              <button
+                className="icon-button"
+                title="Co-op camp · L"
+                onClick={() => setPanel('multiplayer')}
+              >
+                <Hand />
+              </button>
+            </>
+          )}
           <button
             className="icon-button"
             aria-label={snapshot.sound ? 'Mute sound' : 'Enable sound'}
@@ -475,7 +630,7 @@ export default function Game() {
             <p>
               Your boots. Your garden. One very opinionated goose.
               <br />
-              Grow roots. Build something. Irritate a goose.
+              Hunt, cook, explore, upgrade. Bring snacks. Irritate a goose.
             </p>
             <button
               className="start-button"
@@ -600,6 +755,27 @@ export default function Game() {
           <div className="location-label">
             <MapPin size={14} />
             {REGIONS[regionAt(snapshot.player.x, snapshot.player.z)].name}
+          </div>
+          <div className="survival-hud" aria-label="Survival meters">
+            <span
+              className={snapshot.frontier.needs.hunger < 25 ? 'danger' : ''}
+            >
+              Food <b>{Math.ceil(snapshot.frontier.needs.hunger)}</b>
+              <kbd>F</kbd>
+            </span>
+            <span
+              className={snapshot.frontier.needs.thirst < 25 ? 'danger' : ''}
+            >
+              Water <b>{Math.ceil(snapshot.frontier.needs.thirst)}</b>
+              <kbd>G</kbd>
+            </span>
+            <span>
+              Health <b>{Math.ceil(snapshot.frontier.needs.health)}</b>
+            </span>
+            <small>
+              Canteen {snapshot.frontier.needs.canteen} · Day{' '}
+              {1 + Math.floor(snapshot.frontier.needs.activeTime / 600)}
+            </small>
           </div>
           <div className="energy">
             <Leaf size={17} />
@@ -761,9 +937,13 @@ export default function Game() {
           </div>
           <div className="save-indicator">
             <span />{' '}
-            {saveOk
-              ? 'Progress saved on this device'
-              : 'Saving unavailable · export in Settings'}
+            {camp
+              ? campError
+                ? 'Camp reconnecting · open L for details'
+                : 'Co-op camp · shared progress saved'
+              : saveOk
+                ? 'Progress saved on this device'
+                : 'Saving unavailable · export in Settings'}
           </div>
           <div className="touch-actions">
             <button
@@ -847,9 +1027,7 @@ export default function Game() {
       )}
       <Panels
         pack={(id) => {
-          notify(dismantle(data.current, id));
-          refresh();
-          persist();
+          void perform({ type: 'pack', id });
         }}
         panel={panel}
         state={snapshot}
@@ -865,38 +1043,38 @@ export default function Game() {
             'Aim down at clear ground. The crosshair places the footprint. R rotates; E, Enter or click builds.',
           );
         }}
-        craft={(type: Craftable, amount = 1) => {
-          notify(craft(data.current, type, amount));
-          audio.current?.effect('craft');
-          refresh();
-          persist();
+        craft={(recipe: Craftable, amount = 1) => {
+          void perform({ type: 'craft', recipe, amount });
         }}
         contract={(id) => {
-          notify(completeContract(data.current, id));
-          refresh();
-          persist();
+          void perform({ type: 'contract', id });
         }}
-        trade={(type, sell) => {
-          notify(trade(data.current, type, sell));
-          refresh();
-          persist();
+        trade={(resource, sell) => {
+          void perform({ type: 'trade', resource, sell });
         }}
-        eat={(type) => {
-          if (data.current.inventory[type] < 1) return;
-          data.current.inventory[type]--;
-          if (world.current)
-            world.current.stamina = Math.min(
-              100,
-              world.current.stamina + (type === 'bread' ? 50 : 20),
-            );
-          notify(
-            type === 'bread'
-              ? 'A wholesome snack. The goose is jealous.'
-              : 'Crunch. A delicious agricultural achievement.',
+        eat={(food) => {
+          void perform({ type: 'eat', food });
+        }}
+        frontier={(action: FrontierAction) => {
+          void perform(
+            action.kind === 'gear'
+              ? { type: 'gear', gear: action.id as Gear }
+              : action.kind === 'eat'
+                ? { type: 'eat', food: action.id as Resource }
+                : action.kind === 'drink'
+                  ? { type: 'drink' }
+                  : { type: action.kind, id: action.id },
           );
-          refresh();
-          persist();
         }}
+        multiplayer={
+          <MultiplayerPanel
+            camp={camp}
+            busy={campBusy}
+            error={campError}
+            enter={enterCamp}
+            leave={leaveCamp}
+          />
+        }
         viewSetting={(key, value) => {
           data.current.view = {
             ...data.current.view,
@@ -925,6 +1103,10 @@ export default function Game() {
         exportSave={exportSave}
         importSave={importSave}
         restart={() => {
+          if (campClient.current?.code) {
+            notify('Leave the shared camp before starting a new solo island.');
+            return;
+          }
           const fresh = initialState();
           if (saveGame(fresh)) location.reload();
           else

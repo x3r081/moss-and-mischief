@@ -6,6 +6,9 @@ export const RESOURCE_KINDS: readonly string[] = [
   'clay',
   'mushroom',
   'apple',
+  'berries',
+  'herbs',
+  'salt',
 ];
 export function harvestedLabel(kind: string) {
   return kind === 'wood'

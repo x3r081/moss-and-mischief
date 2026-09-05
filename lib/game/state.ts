@@ -1,5 +1,12 @@
 import { onLand } from './terrain';
 import story from './quests.json';
+import frontierStory from './frontier-quests.json';
+import {
+  initialFrontier,
+  parseFrontier,
+  stationLevel,
+  type FrontierState,
+} from './frontier';
 import { DEFAULT_VIEW, normalizeView, type ViewSettings } from './first-person';
 import {
   RESOURCE_NAMES,
@@ -19,6 +26,7 @@ import {
 } from './catalog';
 export * from './catalog';
 export type Building = {
+  level?: number;
   id: string;
   type: Structure;
   x: number;
@@ -33,6 +41,7 @@ export type Plot = {
   watered: boolean;
   crop: Crop;
   boosted: boolean;
+  growthBonus?: number;
 };
 export type Stats = {
   gathered: number;
@@ -43,7 +52,8 @@ export type Stats = {
   explored: boolean;
 };
 export type GameState = {
-  version: 2;
+  version: 3;
+  frontier: FrontierState;
   view: ViewSettings;
   inventory: Inventory;
   buildings: Building[];
@@ -102,13 +112,16 @@ export const ACT_NAMES = [
   'The generous island',
   'What the stars forgot',
   'A festival worth the honk',
+  ...frontierStory.actNames,
 ];
 export function count(s: GameState, key: string): number {
   if (key.startsWith('build:'))
     return s.buildings.filter((b) => b.type === key.slice(6)).length;
   return s.counters[key] ?? 0;
 }
-export const QUESTS = (story.main as QuestData[]).map((q) => ({
+export const QUESTS = (
+  [...story.main, ...frontierStory.main] as QuestData[]
+).map((q) => ({
   ...q,
   target: q.objectives.reduce((n, o) => n + o.target, 0),
   progress: (s: GameState) =>
@@ -116,14 +129,26 @@ export const QUESTS = (story.main as QuestData[]).map((q) => ({
   check: (s: GameState) =>
     q.objectives.every((o) => count(s, o.key) >= o.target),
 }));
-export const CONTRACTS = story.contracts as Contract[];
+export const CONTRACTS = [
+  ...story.contracts,
+  ...frontierStory.contracts,
+] as Contract[];
 export function initialState(): GameState {
   const inventory = Object.fromEntries(
     Object.keys(RESOURCE_NAMES).map((k) => [k, 0]),
   ) as Inventory;
-  Object.assign(inventory, { wood: 3, stone: 2, fiber: 2, seed: 8, coins: 10 });
+  Object.assign(inventory, {
+    wood: 3,
+    stone: 2,
+    fiber: 2,
+    seed: 8,
+    coins: 10,
+    bread: 2,
+    berries: 4,
+  });
   return {
-    version: 2,
+    version: 3,
+    frontier: initialFrontier(),
     view: { ...DEFAULT_VIEW },
     inventory,
     buildings: [],
@@ -214,7 +239,21 @@ export function requiredTool(
 ): Tool | null {
   if (kind === 'wood') return 'axe';
   if (['stone', 'ore', 'clay'].includes(kind)) return 'pickaxe';
-  if (['fiber', 'mushroom', 'apple', 'relic'].includes(kind)) return 'hands';
+  if (
+    [
+      'fiber',
+      'mushroom',
+      'apple',
+      'relic',
+      'berries',
+      'herbs',
+      'salt',
+      'cache',
+      'landmark',
+    ].includes(kind)
+  )
+    return 'hands';
+  if (kind === 'animal') return 'spear';
   if (kind === 'fish') return 'rod';
   if (kind === 'plot') {
     const p = s.plots.find((p) => p.id === id);
@@ -238,7 +277,7 @@ export function growth(p: Plot, now = Date.now()) {
           (now - p.planted) /
             ((CROPS[p.crop]?.time ?? GROW_TIME) *
               (p.watered ? 1 : 2.5) *
-              (p.boosted ? 0.65 : 1)),
+              (p.boosted ? 0.65 / (p.growthBonus ?? 1) : 1)),
         ),
       );
 }
@@ -259,8 +298,13 @@ export function farm(s: GameState, id: string, now = Date.now()) {
     p.crop = s.crop;
     p.planted = now;
     p.boosted = s.buildings.some(
-      (b) => b.type === 'greenhouse' && Math.hypot(b.x - p.x, b.z - p.z) < 9,
+      (b) =>
+        b.type === 'greenhouse' &&
+        Math.hypot(b.x - p.x, b.z - p.z) < 9 + ((b.level ?? 1) - 1) * 3,
     );
+    p.growthBonus = p.boosted
+      ? 1 + Math.max(0, stationLevel(s, 'greenhouse') - 1) * 0.2
+      : 1;
     p.watered = p.boosted;
     s.stats.planted++;
     addCount(s, `plant:${p.crop}`);
@@ -295,14 +339,23 @@ export function craft(s: GameState, type: Craftable, amount = 1) {
     return `Unlock this recipe by completing quest ${r.unlock}.`;
   if (r.station && !s.buildings.some((b) => b.type === r.station))
     return `Build a ${RECIPES[r.station].name.toLowerCase()} first.`;
+  if (r.station && stationLevel(s, r.station) < (r.stationLevel ?? 1))
+    return `Upgrade your ${RECIPES[r.station].name.toLowerCase()} to level ${r.stationLevel} first (U).`;
   const cost = Object.fromEntries(
     Object.entries(r.cost).map(([k, v]) => [k, v! * amount]),
   );
   if (!pay(s, cost)) return 'Not enough ingredients for that batch.';
-  s.inventory[type] += amount;
-  addCount(s, `craft:${type}`, amount);
+  const output =
+    amount *
+    (r.station &&
+    (stationLevel(s, r.station) >= 3 ||
+      (r.station === 'kiln' && stationLevel(s, 'kiln') >= 2))
+      ? 2
+      : 1);
+  s.inventory[type] += output;
+  addCount(s, `craft:${type}`, output);
   if (type === 'bread') s.stats.crafted += amount;
-  return `+${amount} ${r.name}. Handmade, goose approved.`;
+  return `+${output} ${r.name}. ${output > amount ? 'Master workshop bonus!' : 'Handmade, goose approved.'}`;
 }
 export function build(
   s: GameState,
@@ -325,7 +378,7 @@ export function build(
     return 'Your island has reached its building limit. Pack away a structure first.';
   if (!pay(s, RECIPES[type].cost)) return 'You need a few more materials.';
   const id = `built-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  s.buildings.push({ id, type, x, z, rotation });
+  s.buildings.push({ id, type, x, z, rotation, level: 1 });
   addCount(s, `built:${type}`);
   if (type === 'garden')
     for (let i = 0; i < 3; i++)
@@ -343,7 +396,17 @@ export function build(
 export function gather(
   s: GameState,
   id: string,
-  type: 'wood' | 'stone' | 'fiber' | 'clay' | 'ore' | 'mushroom' | 'apple',
+  type:
+    | 'wood'
+    | 'stone'
+    | 'fiber'
+    | 'clay'
+    | 'ore'
+    | 'mushroom'
+    | 'apple'
+    | 'berries'
+    | 'herbs'
+    | 'salt',
   now = Date.now(),
 ) {
   const need = requiredTool(s, type)!;
@@ -354,7 +417,13 @@ export function gather(
   if (type === 'mushroom' && !s.buildings.some((b) => b.type === 'shed'))
     return 'Build a ranger’s shed to learn which mushrooms are legally lunch.';
   s.depleted[id] = now + 60000;
-  const n = type === 'wood' || type === 'stone' ? 4 : 3;
+  const n =
+    (type === 'wood' || type === 'stone' ? 4 : 3) +
+    (type === 'wood'
+      ? (s.frontier.gear.axe - 1) * 2
+      : ['stone', 'ore', 'clay'].includes(type)
+        ? (s.frontier.gear.pickaxe - 1) * 2
+        : 0);
   s.inventory[type] += n;
   s.stats.gathered += n;
   addCount(s, `gather:${type}`, n);
@@ -524,7 +593,7 @@ export function parseSave(raw: string | null): GameState | null {
     if (!raw || raw.length > 1_000_000) return null;
     const x = JSON.parse(raw);
     if (
-      ![1, 2].includes(x.version) ||
+      ![1, 2, 3].includes(x.version) ||
       !record(x.inventory) ||
       !record(x.stats) ||
       !Array.isArray(x.buildings) ||
@@ -539,7 +608,7 @@ export function parseSave(raw: string | null): GameState | null {
     const legacy = x.version === 1;
     const inventory = initialState().inventory;
     for (const k of Object.keys(inventory) as Resource[]) {
-      const v = x.inventory[k] ?? (legacy ? 0 : undefined);
+      const v = x.inventory[k] ?? (x.version < 3 ? 0 : undefined);
       if (!Number.isSafeInteger(v) || Number(v) < 0 || Number(v) > 1_000_000)
         return null;
       inventory[k] = Number(v);
@@ -594,7 +663,29 @@ export function parseSave(raw: string | null): GameState | null {
       new Set(x.plots.map((p: Plot) => p.id)).size !== x.plots.length
     )
       return null;
-    const s = { ...initialState(), ...x, version: 2, inventory } as GameState;
+    const frontier = parseFrontier(x.frontier, x.version < 3);
+    if (!frontier) return null;
+    const s = {
+      ...initialState(),
+      ...x,
+      version: 3,
+      inventory,
+      frontier,
+    } as GameState;
+    if (
+      x.buildings.some(
+        (b: Building) =>
+          b.level !== undefined &&
+          (!Number.isInteger(b.level) || b.level < 1 || b.level > 3),
+      )
+    )
+      return null;
+    s.buildings = x.buildings.map((b: Building) => ({
+      ...b,
+      level: b.level ?? 1,
+    }));
+    s.won =
+      x.projects?.festival === true && x.completed?.length === QUESTS.length;
     s.view = normalizeView(x.view);
     s.quality = x.quality === 'low' ? 'low' : 'high';
     s.sound = x.sound !== false;
@@ -615,6 +706,10 @@ export function parseSave(raw: string | null): GameState | null {
       ...p,
       crop: legacy ? 'carrot' : p.crop,
       boosted: !!p.boosted,
+      growthBonus:
+        typeof p.growthBonus === 'number' && Number.isFinite(p.growthBonus)
+          ? Math.max(1, Math.min(1.4, p.growthBonus))
+          : 1,
     }));
     if (legacy) {
       s.migrated = true;

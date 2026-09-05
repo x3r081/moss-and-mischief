@@ -1,56 +1,66 @@
 # Moss & Mischief
 
-An original single-player 3D island adventure. Build a homestead, tend a garden, craft useful things, and restore a lighthouse, reopen the highlands, chart the stars, and host a festival while a goose mayor takes the credit.
+A first-person 3D island adventure about building a village, exploring suspicious ruins, and keeping a goose mayor supplied with good news. All models, terrain, shaders, and audio are original procedural content.
 
 ## Play
 
-Play at eye level with a perspective camera, visible hands and tools, and crosshair targeting. Click the scene to capture the mouse, move the mouse to look, WASD to walk, Shift to run, Space to hop, and E or left-click to use the aimed object within reach. Interactions respect scenery and walls. Tab frees the cursor; Escape pauses. Menus release the mouse and wait for your next click to recapture it.
+Click the scene to capture the mouse. Move the mouse to look, WASD to walk, Shift to run, Space to hop, and E or left-click to use the object under the crosshair. Tab frees the cursor; Escape pauses. If capture is unavailable, button-free mouse follow takes over. Touch controls and arrow-key turning are also available.
 
-If mouse capture is unavailable, button-free mouse follow starts automatically. Move the pointer to an edge to keep turning; Tab frees the cursor for HUD buttons. On touch screens, drag the scene to look and use the movement pad, Use button and Hop button. Arrow keys also turn the view. Scroll cycles all seven tools without opening menus, cancelling any active placement. R rotates a building plan. B opens building, C crafting, I the backpack, J the journal. Settings include field of view, mouse sensitivity, and optional head movement (off by default). The island and campaign remain fully playable in first person.
+Scroll or press 1–8 to select axe, pickaxe, seeds, watering can, build tool, hands, fishing rod, or hunting spear. Craft the first spear at a workbench through **U**. R rotates a building preview or changes the selected crop. B opens building plans, C crafting, I inventory, J the journal, U upgrades and expeditions, and L co-op camps. F eats a carried meal; G drinks from your canteen.
 
-The expansion has 36 story quests across six acts, 12 repeatable resident contracts, six regions, 17 building plans, 11 crafting recipes, and four crops. The island spans roughly 4.5 times its original area. Fishing has timed bites, coops and apiaries turn feed into produce, and five community projects culminate in a festival. Free play continues afterward.
+The frontier expansion includes:
 
-Select tools explicitly: 1 axe (wood), 2 pickaxe (stone/clay/ore), 3 seeds (plant selected crop), 4 watering can, 5 building, 6 hands (harvest/forage/relics), 7 fishing rod. E uses the selected tool; conversations, stations and community projects accept any tool. Watered crops mature in 70–140 seconds. Refill the watering can at the village spring or a well. There are no purchases or subscriptions.
+- 72 story quests across 12 acts, 24 repeatable resident contracts, and six repeatable expeditions.
+- Six regions, eight discoverable landmarks with replenishing caches, and 22 roaming rabbits, deer and boars.
+- 17 building plans, nine workshop/building upgrade paths, five equipment upgrade paths, 21 material/food recipes, and four crops.
+- Hunting, cooking, personal hunger/thirst/health, canteens, comfort bonuses, and camp rescue. Needs pause in menus and do not drain offline. Hungry or dehydrated explorers move and recover stamina more slowly; empty supplies cause health loss. Cook meat before eating. Boars damage nearby players.
+- Level 2 workbenches unlock leather and rope; level 2 forges unlock steel. Level 3 workbenches unlock machinery and trail rations. Master crafting stations double output; kiln level 2 already doubles bricks. Upgraded sheds improve hunting, greenhouses extend irrigation and accelerate growth, wells/cottages provide comfort, and taverns improve meals.
+- Fishing with timed bites, feed-based livestock production, village trading, community projects, and free play after the story.
 
-Tool actions have separate wind-up, impact, and recovery animations. Resources and effects change at the impact frame, with distinct wood chips and mining feedback. Switching tools, pausing, or losing the target prevents an unfinished hit from harvesting. Depleted trees become low cut stumps; rock deposits become rubble, and forage becomes clipped patches. Target the remains to see the regrowth countdown. Their footprints remain reserved for regrowth.
+Tool animations apply effects at impact. Depleted trees become short stumps, deposits become rubble, and forage becomes clipped patches with regrowth countdowns. Hunted animals disappear until their trail repopulates. The building grid shows valid footprints and rejection reasons; resource areas stay reserved for regrowth.
 
-## Local development
+## Co-op camps
 
-Requires Node.js 22.13 or newer.
+Open **L**, name your explorer, and create a shared copy of your current island. Give friends the invitation link or 16-character code; the hosted site must also allow them access. Up to four active explorers can see each other and share materials, construction, farming, crafting, upgrades, story objectives, and expeditions. Hunger, thirst, health and canteens belong to each explorer.
+
+Camps persist in the hosted database after everyone leaves. Keep the code to rejoin. Explorer membership uses a private browser cookie; it is not an account or cross-device identity. Leaving ends that membership and restores the untouched solo save. Exporting while in a camp downloads a snapshot of the shared island. Importing or resetting a solo save requires leaving the camp first.
+
+This is simple co-op for trusted friends, with approximately one-second presence updates and interpolated avatars. There is no public matchmaking, chat, PvP or host moderation. Anyone with the camp code and site access can join and edit that island. The server validates known targets, reach, movement bounds, recipe gates, materials and placement, and serializes shared changes to avoid lost updates. Commands require a connection. No paid assets, purchases or subscriptions were added.
+
+## Development
+
+Node.js 22.13 or newer is required.
 
 ```sh
 npm ci
+npm run build
+npm run db:local
 npm run dev
+```
+
+The first build emits the local Worker configuration. `db:local` applies the checked-in migrations to the project-local D1 development database; it does not contact a remote Cloudflare account. Run it when new migrations are added. Solo mode does not need the database.
+
+```sh
 npm test
 npm run typecheck
 npm run lint
+npm run test:camp
 npm run build
 ```
 
-The app uses React, Three.js and the Sites/Vinext framework. All 3D meshes, terrain, shaders, and audio are original procedural content created for this project; no paid asset libraries or external media downloads are needed. Fonts use the system font stack. Third-party libraries retain their respective licenses in node_modules and the dependency lockfile.
+`test:camp` requires the local server and migrated local database. It creates disposable local test camps and tests separate cookie sessions, shared harvests, concurrent paid builds/crafts, retries, slot limits, membership checks, personal canteens, and durable rejoining. Unit tests include the full 72-quest crafting/progression chain, migration, survival and hunting, geometry, walkable approaches, and first-person input/animation contracts. Browser/device playtesting and load testing are not covered by those checks.
 
-## Saves and settings
+## Saves and source
 
-Version 1 saves migrate to version 2, preserving inventory, plots, buildings and opening-act progress. An old lighthouse ending continues at quest seven. Saves are device-local, versioned, validated, and written after actions and every ten seconds. A previous valid save is retained as a backup. Settings provide JSON export/import, sound control, high or lightweight graphics, fullscreen, and a confirmed fresh start. Building materials are fully refunded when a structure is packed away. Plant growth uses timestamps and continues while away.
+Version 1 and 2 saves migrate to version 3. Existing buildings, crops, inventory and completed quests survive. The old lighthouse ending continues at quest seven, and the old festival ending continues into the frontier acts. Solo saves retain a previous valid backup and support JSON import/export. Crop growth uses timestamps. Packing refunds original building materials, feed and planted seeds; upgrade materials are not refunded.
 
-## Project structure
+- `lib/game/world.ts`: scene, first-person controls, placement, wildlife and avatars.
+- `lib/game/state.ts`, `catalog.ts`, `quests.json`, `frontier-quests.json`: economy and progression.
+- `lib/game/frontier.ts`: survival, hunting, equipment, workshop upgrades and expeditions.
+- `lib/game/commands.ts`, `targets.json`: common validated action rules and scene target registry.
+- `scripts/generate-world-targets.ts`: exports deterministic scene targets; rerun after changing world layout.
+- `lib/game/camp.ts`, `app/api/camp/route.ts`: co-op client and database-backed room service.
+- `db/schema.ts`, `drizzle/`: database schema and generated migrations, packaged by Sites.
+- `components/game`: HUD, crafting, upgrades, field notes and camp panels.
 
-- `lib/game/world.ts`: scene, first-person camera, pointer capture/fallback/touch controls, crosshair raycasting, movement, collision, placement and animation.
-- `lib/game/first-person.ts`: view settings, look/movement math and line-of-sight selection.
-- `lib/game/first-person-models.ts`: camera-space hands and seven tool models.
-- `lib/game/first-person-motion.ts`: reusable articulated tool and hand animations.
-- `lib/game/resource-remains.ts`: pooled cut stumps, rubble, and clipped patches.
-- `lib/game/models.ts`: shared procedural 3D asset library.
-- `lib/game/state.ts`: economy, production, fishing, progression and save migration.
-- `lib/game/catalog.ts` and `quests.json`: recipes, residents, crops, projects and campaign content.
-- `lib/game/extra-models.ts`: expansion structures, villagers, resource patches and crops.
-- `lib/game/placement.ts`: shared rotated footprint, slope, reach and collision checks.
-- `lib/game/audio.ts`: synthesized music and effects, activated by a user gesture.
-- `components/game`: HUD, dialogs, crafting, settings and journal map.
-- `tests/game.test.ts`: complete progression, economic invariants, save recovery, terrain/asset contracts and optional WebMCP action checks.
-
-## Release validation and scope
-
-Automated gameplay and model tests, TypeScript checks, dependency audit, and a production build are required before deployment. The optional WebMCP API feature-detects browser support; its contract is covered by unit tests. No supported live WebMCP validation context was available for this build.
-
-This is a single-player adventure, with an expanded island and a six-act campaign. The content is intended for substantially longer play than the opening act; no measured completion-time claim is made. It is not a multiplayer service. Saves do not automatically sync across devices. Broad device/browser playtesting and performance certification remain release follow-up work; no such coverage is claimed by the automated tests.
+React, Three.js, Vinext and supporting libraries retain their own licenses. The system font stack and procedural assets avoid external media downloads.

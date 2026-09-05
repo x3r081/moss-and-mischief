@@ -55,6 +55,19 @@ import {
   disposeResourceRemains,
 } from './resource-remains';
 import { RESOURCE_KINDS, harvestedLabel } from './resource-status';
+import {
+  ANIMALS,
+  LANDMARKS,
+  animalPosition,
+  advanceSurvival,
+} from './frontier';
+import {
+  makeAnimal,
+  makeExplorer,
+  makeLandmark,
+  makeUpgradeOrnament,
+  disposeFrontierModels,
+} from './frontier-models';
 import { canAnimateInteraction } from './interactions';
 import {
   FirstPersonMotion,
@@ -88,7 +101,13 @@ export type Entity = {
     | 'spring'
     | 'station'
     | 'production'
-    | 'market';
+    | 'market'
+    | 'animal'
+    | 'landmark'
+    | 'cache'
+    | 'berries'
+    | 'herbs'
+    | 'salt';
   name: string;
   x: number;
   z: number;
@@ -99,8 +118,13 @@ export type WorldEvents = {
   near: (e: Entity | null) => void;
   look: (mode: LookMode) => void;
   placement: (valid: boolean, message: string) => void;
-  interact: (e: Entity, actionTime?: number) => boolean;
-  place: (type: Structure, x: number, z: number, rotation: number) => void;
+  interact: (e: Entity, actionTime?: number) => boolean | Promise<boolean>;
+  place: (
+    type: Structure,
+    x: number,
+    z: number,
+    rotation: number,
+  ) => boolean | void | Promise<boolean>;
   menu: (name: string) => void;
   move: (x: number, z: number, stamina: number) => void;
   ready: () => void;
@@ -117,6 +141,8 @@ const mat = (c: number) =>
   new THREE.MeshStandardMaterial({ color: c, roughness: 1, flatShading: true });
 
 export class IslandWorld {
+  private disposed = false;
+  multiplayer = false;
   scene = new THREE.Scene();
   camera: THREE.PerspectiveCamera;
   renderer: THREE.WebGLRenderer;
@@ -190,6 +216,12 @@ export class IslandWorld {
     string,
     { live: THREE.Object3D; remains: THREE.Group }
   >();
+  private animals = new Map<string, Entity>();
+  private peers = new Map<
+    string,
+    { model: THREE.Group; x: number; z: number; yaw: number }
+  >();
+  private lastBoarHit = 0;
   private equipped: Tool | null = null;
   private last = 0;
   private frame = 0;
@@ -265,6 +297,7 @@ export class IslandWorld {
     this.createVillage();
     this.createNature();
     this.createExpansion();
+    this.createFrontier();
     this.prepareResourceVisuals();
     this.createAtmosphere();
     this.staticAimMeshes = this.collectAimMeshes(this.scene);
@@ -1149,6 +1182,197 @@ export class IslandWorld {
         this.blockers.push({ x, z, r: 2.1 });
       }
   }
+  private createFrontier() {
+    for (const a of ANIMALS) {
+      const p = animalPosition(a),
+        model = this.placeObject(makeAnimal(a.kind), p.x, p.z);
+      this.entity(
+        a.id,
+        'animal',
+        `${a.kind === 'rabbit' ? 'Bureaucratic bunny' : a.kind === 'boar' ? 'Wild boar · charges if cornered' : 'Deer of questionable judgment'}`,
+        p.x,
+        p.z,
+        model,
+        0.7,
+      );
+      this.animals.set(a.id, this.entities[this.entities.length - 1]);
+    }
+    for (const l of LANDMARKS) {
+      const model = this.placeObject(makeLandmark(l.kind), l.x, l.z);
+      this.entity(l.id, 'landmark', l.name, l.x, l.z, model, 1.3);
+      this.blockers.push({ x: l.x, z: l.z, r: 1.2 });
+      const cache = this.placeObject(
+        makeLandmark('treasure'),
+        l.x + 2.3,
+        l.z + 2.2,
+      );
+      this.entity(
+        `cache-${l.id}`,
+        'cache',
+        'Rummage through ancient luggage',
+        l.x + 2.3,
+        l.z + 2.2,
+        cache,
+        0.5,
+      );
+    }
+    const leaf = mat(0x3f824c),
+      berry = mat(0xaf4654),
+      herb = mat(0x9fbc55),
+      salt = mat(0xe6ddc0);
+    const sphere = new THREE.IcosahedronGeometry(0.23, 0);
+    for (const kind of ['berries', 'herbs', 'salt'] as const) {
+      for (let i = 0; i < 12; i++) {
+        const angle = i * 2.399 + (kind === 'herbs' ? 1 : 0);
+        const radius = kind === 'salt' ? 45 : 12 + (i % 4) * 7;
+        const x =
+          kind === 'berries' && i < 2 ? -3 - i * 3 : Math.cos(angle) * radius;
+        const z = kind === 'berries' && i < 2 ? 13 : Math.sin(angle) * radius;
+        const g = new THREE.Group();
+        for (let j = 0; j < 4; j++) {
+          const piece = new THREE.Mesh(sphere, kind === 'salt' ? salt : leaf);
+          piece.position.set(
+            Math.cos(j * 2) * 0.25,
+            kind === 'salt' ? 0.12 : 0.22,
+            Math.sin(j * 2) * 0.25,
+          );
+          piece.scale.set(1.3, kind === 'salt' ? 0.5 : 1.3, 1.3);
+          g.add(piece);
+          if (kind !== 'salt') {
+            const fruit = new THREE.Mesh(
+              sphere,
+              kind === 'berries' ? berry : herb,
+            );
+            fruit.position
+              .copy(piece.position)
+              .add(new THREE.Vector3(0, 0.23, 0.07));
+            fruit.scale.setScalar(0.45);
+            g.add(fruit);
+          }
+        }
+        this.placeObject(g, x, z);
+        this.entity(`${kind}-${i}`, kind, `Gather ${kind}`, x, z, g, 0.55);
+      }
+    }
+  }
+  setPeers(
+    players: { id: string; name: string; x: number; z: number; yaw: number }[],
+  ) {
+    for (const [id, peer] of this.peers)
+      if (!players.some((p) => p.id === id)) {
+        this.scene.remove(peer.model);
+        this.peers.delete(id);
+        peer.model.traverse((o) => {
+          if (o instanceof THREE.Sprite) {
+            o.material.map?.dispose();
+            o.material.dispose();
+          }
+        });
+      }
+    for (const p of players) {
+      let peer = this.peers.get(p.id);
+      if (!peer) {
+        const hash = p.id.split('').reduce((n, c) => n + c.charCodeAt(0), 0);
+        const model = this.placeObject(
+          makeExplorer([0x55aaa5, 0xc8804d, 0x9589bd, 0xb6b15a][hash % 4]),
+          p.x,
+          p.z,
+        );
+        const canvas = document.createElement('canvas');
+        canvas.width = 256;
+        canvas.height = 56;
+        const ctx = canvas.getContext('2d')!;
+        ctx.fillStyle = '#123c36';
+        ctx.fillRect(0, 0, 256, 56);
+        ctx.fillStyle = '#fff2ce';
+        ctx.font = 'bold 24px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(p.name.slice(0, 20), 128, 36);
+        const label = new THREE.Sprite(
+          new THREE.SpriteMaterial({
+            map: new THREE.CanvasTexture(canvas),
+            depthTest: false,
+          }),
+        );
+        label.position.y = 2.1;
+        label.scale.set(1.8, 0.4, 1);
+        model.add(label);
+        peer = { model, x: p.x, z: p.z, yaw: p.yaw };
+        this.peers.set(p.id, peer);
+      }
+      peer.x = p.x;
+      peer.z = p.z;
+      peer.yaw = p.yaw;
+    }
+  }
+  private animateFrontier(dt: number) {
+    const s = this.state(),
+      now = Date.now();
+    for (const a of ANIMALS) {
+      const e = this.animals.get(a.id);
+      if (!e) continue;
+      e.object.visible = !(s.depleted[a.id] > now);
+      if (!e.object.visible) continue;
+      const p = animalPosition(a, now),
+        next = animalPosition(a, now + 100);
+      e.x = p.x;
+      e.z = p.z;
+      e.object.position.set(
+        p.x,
+        heightAt(p.x, p.z) +
+          (a.kind === 'rabbit'
+            ? Math.abs(Math.sin(now / 150 + a.seed)) * 0.12
+            : 0),
+        p.z,
+      );
+      e.object.rotation.y = Math.atan2(next.x - p.x, next.z - p.z);
+      for (let i = 0; i < 4; i++) {
+        const leg = e.object.getObjectByName(`leg-${i}`);
+        if (leg) leg.rotation.x = Math.sin(now / 180 + i * Math.PI) * 0.35;
+      }
+      if (
+        !this.paused &&
+        !this.multiplayer &&
+        a.kind === 'boar' &&
+        Math.hypot(p.x - this.player.position.x, p.z - this.player.position.z) <
+          1.3 &&
+        now - this.lastBoarHit > 2000
+      ) {
+        s.frontier.needs.health = Math.max(0, s.frontier.needs.health - 8);
+        this.lastBoarHit = now;
+        this.events.menu('boar-warning');
+      }
+    }
+    for (const peer of this.peers.values()) {
+      const distance = Math.hypot(
+        peer.x - peer.model.position.x,
+        peer.z - peer.model.position.z,
+      );
+      peer.model.position.x +=
+        (peer.x - peer.model.position.x) * Math.min(1, dt * 7);
+      peer.model.position.z +=
+        (peer.z - peer.model.position.z) * Math.min(1, dt * 7);
+      peer.model.position.y = heightAt(
+        peer.model.position.x,
+        peer.model.position.z,
+      );
+      peer.model.rotation.y +=
+        (THREE.MathUtils.euclideanModulo(
+          peer.yaw - peer.model.rotation.y + Math.PI,
+          Math.PI * 2,
+        ) -
+          Math.PI) *
+        Math.min(1, dt * 8);
+      for (const [i, name] of ['leg-0', 'leg-1'].entries()) {
+        const leg = peer.model.getObjectByName(name);
+        if (leg)
+          leg.rotation.x =
+            distance > 0.02
+              ? Math.sin(this.clock * 10 + i * Math.PI) * 0.45
+              : 0;
+      }
+    }
+  }
   private walkable(x: number, z: number) {
     const s = this.state();
     return (
@@ -1337,6 +1561,10 @@ export class IslandWorld {
         if (e.code === 'KeyC') this.events.menu('craft');
         if (e.code === 'KeyJ') this.events.menu('journal');
         if (e.code === 'KeyI') this.events.menu('inventory');
+        if (e.code === 'KeyU') this.events.menu('adventure');
+        if (e.code === 'KeyL') this.events.menu('multiplayer');
+        if (e.code === 'KeyF') this.events.menu('quick-eat');
+        if (e.code === 'KeyG') this.events.menu('drink');
         if (e.code === 'KeyR') {
           if (this.buildType) this.rotateBuild();
           else if (this.state().tool === 'seeds')
@@ -1514,6 +1742,7 @@ export class IslandWorld {
           'build',
           'hands',
           'rod',
+          'spear',
         ];
         const next =
           (tools.indexOf(this.state().tool) + direction + tools.length) %
@@ -1609,6 +1838,14 @@ export class IslandWorld {
   hop() {
     if (!this.paused && this.jump <= 0) this.jumpSpeed = 5;
   }
+  relocate() {
+    const p = this.state().player;
+    this.player.position.set(p.x, heightAt(p.x, p.z), p.z);
+    this.jump = 0;
+    this.jumpSpeed = 0;
+    this.cancelAction();
+    this.updateView();
+  }
   setMovement(x: number, z: number) {
     for (const k of ['KeyW', 'KeyA', 'KeyS', 'KeyD']) this.keys.delete(k);
     if (x < -0.2) this.keys.add('KeyA');
@@ -1668,7 +1905,7 @@ export class IslandWorld {
     }
     const s = this.state();
     if (!canAnimateInteraction(s, target.kind, target.id)) {
-      this.events.interact(target);
+      void this.events.interact(target);
       return;
     }
     this.action = {
@@ -1708,7 +1945,12 @@ export class IslandWorld {
             current,
             action.motion === 'reel' ? action.requestedAt : undefined,
           );
-          if (changed) this.burst(current.x, current.z, action.tool);
+          if (changed instanceof Promise)
+            void changed.then((ok) => {
+              if (ok && !this.disposed)
+                this.burst(current.x, current.z, action.tool);
+            });
+          else if (changed) this.burst(current.x, current.z, action.tool);
         }
       } else if (action.building) {
         this.updateGhost();
@@ -1720,9 +1962,15 @@ export class IslandWorld {
           Math.hypot(this.ghostPoint.x - b.x, this.ghostPoint.z - b.z) < 0.75 &&
           this.canPlace(b.type, b.x, b.z, b.rotation)
         ) {
-          this.events.place(b.type, b.x, b.z, b.rotation);
-          this.burst(b.x, b.z, 'build');
-          this.setBuild(null);
+          const result = this.events.place(b.type, b.x, b.z, b.rotation);
+          const done = (ok: boolean | void) => {
+            if (ok !== false && !this.disposed) {
+              this.burst(b.x, b.z, 'build');
+              this.setBuild(null);
+            }
+          };
+          if (result instanceof Promise) void result.then(done);
+          else done(result);
         }
       }
     }
@@ -1834,6 +2082,11 @@ export class IslandWorld {
               'mushroom',
               'apple',
               'fiber',
+              'berries',
+              'herbs',
+              'salt',
+              'landmark',
+              'cache',
             ].includes(e.kind) && e.object.visible,
         )
         .map((e) => ({ x: e.x, z: e.z, r: e.radius + 0.35 })),
@@ -1969,9 +2222,31 @@ export class IslandWorld {
       }
     }
     for (const b of state.buildings) {
-      if (this.placed.has(b.id)) continue;
+      if (this.placed.has(b.id)) {
+        const model = this.placed.get(b.id)!;
+        if (model.userData.level !== (b.level ?? 1)) {
+          const old = model.getObjectByName('upgrade-ornament');
+          if (old) model.remove(old);
+          if ((b.level ?? 1) > 1) {
+            const badge = makeUpgradeOrnament(b.level!);
+            badge.name = 'upgrade-ornament';
+            badge.position.set(0.7, 1.3, 0.7);
+            model.add(badge);
+          }
+          model.userData.level = b.level ?? 1;
+          changed = true;
+        }
+        continue;
+      }
       const model = this.placeObject(this.buildModel(b.type), b.x, b.z);
       model.rotation.y = b.rotation;
+      model.userData.level = b.level ?? 1;
+      if ((b.level ?? 1) > 1) {
+        const badge = makeUpgradeOrnament(b.level!);
+        badge.name = 'upgrade-ornament';
+        badge.position.set(0.7, 1.3, 0.7);
+        model.add(badge);
+      }
       this.placed.set(b.id, model);
       changed = true;
       if (b.type !== 'garden' && b.type !== 'fence') {
@@ -2085,6 +2360,7 @@ export class IslandWorld {
         water: 0x80dfe9,
         build: 0xffd781,
         rod: 0x80dfe9,
+        spear: 0xd7c895,
       };
       if (!this.actionMaterials.has(tool))
         this.actionMaterials.set(
@@ -2132,6 +2408,7 @@ export class IslandWorld {
     this.clock += dt;
     this.water.material.uniforms.time.value = this.clock;
     const s = this.state();
+    this.animateFrontier(dt);
     if (!this.paused) {
       s.elapsed += dt;
       if (this.lookMode === 'follow' && this.followPointer)
@@ -2152,14 +2429,30 @@ export class IslandWorld {
         sprint =
           (this.keys.has('ShiftLeft') || this.keys.has('ShiftRight')) &&
           this.stamina > 8;
+      if (!this.multiplayer && advanceSurvival(s, dt, sprint && moving)) {
+        this.player.position.set(
+          s.player.x,
+          heightAt(s.player.x, s.player.z),
+          s.player.z,
+        );
+        this.stamina = 70;
+        this.cancelAction();
+        this.events.menu('rescued');
+      }
+      const healthy =
+        s.frontier.needs.hunger > 20 && s.frontier.needs.thirst > 20;
       this.stamina = THREE.MathUtils.clamp(
-        this.stamina + (moving && sprint ? -15 : 14) * dt,
+        this.stamina + (moving && sprint ? -15 : healthy ? 14 : 5) * dt,
         0,
         100,
       );
       if (moving) {
         const len = Math.hypot(dx, dz),
-          speed = (sprint ? 5.8 : 3.6) * dt;
+          speed =
+            (sprint ? 5.8 : 3.6) *
+            (healthy ? 1 : 0.7) *
+            (1 + (s.frontier.gear.boots - 1) * 0.08) *
+            dt;
         dx = (dx / len) * speed;
         dz = (dz / len) * speed;
         const p = this.player.position;
@@ -2283,6 +2576,7 @@ export class IslandWorld {
     this.frame = requestAnimationFrame(this.tick);
   };
   dispose() {
+    this.disposed = true;
     cancelAnimationFrame(this.frame);
     this.releaseLook();
     this.abort.abort();
@@ -2308,6 +2602,7 @@ export class IslandWorld {
     disposeExtraModelLibrary();
     disposeFirstPersonModels();
     disposeResourceRemains();
+    disposeFrontierModels();
     this.resourceGeo.dispose();
     this.resourceMat.dispose();
     this.chipGeo.dispose();

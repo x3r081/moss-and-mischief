@@ -11,6 +11,9 @@ export function interactionSnapshot(s: GameState, id: string) {
     s.production[id],
     s.projects,
     s.collected,
+    s.frontier.wounds,
+    s.frontier.discoveries,
+    s.frontier.treasures,
   ]);
 }
 
@@ -23,6 +26,7 @@ export function canAnimateInteraction(
 ) {
   const tool = requiredTool(s, kind, id);
   if ((tool && tool !== s.tool) || (s.depleted[id] ?? 0) > now) return false;
+  if (kind === 'animal' && !s.frontier.gear.spear) return false;
   if (kind === 'mushroom' && !s.buildings.some((b) => b.type === 'shed'))
     return false;
   if (kind === 'fish') {

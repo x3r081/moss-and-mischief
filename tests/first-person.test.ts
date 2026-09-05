@@ -533,16 +533,18 @@ void test('wheel cycles all tools through hammer without opening menus, wraps, a
     assert.equal(h.w.buildType, null);
     wheel(100);
     wheel(100);
+    assert.equal(h.s.tool, 'spear');
+    wheel(100);
     assert.equal(h.s.tool, 'axe');
     wheel(-3, 1);
-    assert.equal(h.s.tool, 'rod');
+    assert.equal(h.s.tool, 'spear');
     assert.ok(
       h.menus.every((m) => m.startsWith('tool:')),
       'no build modal interrupts cycling',
     );
     h.w.setPaused(true);
     wheel(100);
-    assert.equal(h.s.tool, 'rod');
+    assert.equal(h.s.tool, 'spear');
     assert.equal(h.w.wheelDelta, 0);
   } finally {
     h.cleanup();
@@ -647,7 +649,7 @@ void test('articulated motions have distinct visible strokes, keep tool and grip
     );
     assert.deepEqual(right.scale.toArray(), handScale.toArray());
   }
-  assert.equal(signatures.size, 8);
+  assert.equal(signatures.size, 9);
   const pick = rig.getObjectByName('tool-pickaxe')!;
   const head = pick.children[1];
   motion.pose('pickaxe', 0.38);

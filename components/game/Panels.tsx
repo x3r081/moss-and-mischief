@@ -1,4 +1,6 @@
 'use client';
+import FrontierPanel, { type FrontierAction } from './FrontierPanel';
+import { FOOD, stationLevel } from '@/lib/game/frontier';
 import { useEffect, useState } from 'react';
 import {
   Dialog,
@@ -104,7 +106,9 @@ type Props = {
   place: (type: Structure) => void;
   pack: (id: string) => void;
   craft: (type: Craftable, amount?: number) => void;
-  eat: (type: 'bread' | 'carrot') => void;
+  eat: (type: Resource) => void;
+  frontier: (action: FrontierAction) => void;
+  multiplayer?: React.ReactNode;
   contract: (id: string) => void;
   trade: (type: Resource, sell: boolean) => void;
   viewSetting: (
@@ -227,6 +231,8 @@ export default function Panels(props: Props) {
   const q = currentQuest(state),
     quest = QUESTS[q],
     titles: Record<string, string> = {
+      adventure: 'A little more adventure.',
+      multiplayer: 'A camp with company.',
       build: 'A village of your own.',
       craft: 'Good things, handmade.',
       inventory: 'A pocket full of possibilities.',
@@ -253,6 +259,10 @@ export default function Panels(props: Props) {
                 : 'Grow roots. Make something. Leave room for a goose.'}
             </DialogDescription>
           </div>
+          {panel === 'adventure' && (
+            <FrontierPanel state={state} act={props.frontier} />
+          )}
+          {panel === 'multiplayer' && props.multiplayer}
           {panel === 'build' && (
             <Tabs defaultValue="plans">
               <TabsList>
@@ -363,9 +373,10 @@ export default function Panels(props: Props) {
                       ).map((type) => {
                         const r = RECIPES[type],
                           open = unlocked(state, type),
-                          station = state.buildings.some(
-                            (b) => b.type === r.station,
-                          ),
+                          station =
+                            !r.station ||
+                            stationLevel(state, r.station) >=
+                              (r.stationLevel ?? 1),
                           cost = Object.fromEntries(
                             Object.entries(r.cost).map(([k, v]) => [
                               k,
@@ -382,7 +393,8 @@ export default function Panels(props: Props) {
                                   {r.name} × {batch}
                                 </h3>
                                 <small>
-                                  {r.station && RECIPES[r.station].name} ·{' '}
+                                  {r.station && RECIPES[r.station].name} Lv{' '}
+                                  {r.stationLevel ?? 1} ·{' '}
                                   {state.inventory[type]} in backpack
                                 </small>
                               </div>
@@ -399,7 +411,7 @@ export default function Panels(props: Props) {
                               {!open
                                 ? `After quest ${r.unlock}`
                                 : !station
-                                  ? `Build ${RECIPES[r.station!].name}`
+                                  ? `Need ${RECIPES[r.station!].name} level ${r.stationLevel ?? 1}`
                                   : canAfford(state, cost)
                                     ? `Craft ${batch}`
                                     : 'More ingredients needed'}
@@ -434,12 +446,11 @@ export default function Panels(props: Props) {
                       <Icon size={25} />
                       <b>{state.inventory[r]}</b>
                       <span>{RESOURCE_NAMES[r]}</span>
-                      {(r === 'carrot' || r === 'bread') &&
-                        state.inventory[r] > 0 && (
-                          <button onClick={() => props.eat(r)}>
-                            Eat · +{r === 'bread' ? 50 : 20} energy
-                          </button>
-                        )}
+                      {FOOD[r] && state.inventory[r] > 0 && (
+                        <button onClick={() => props.eat(r)}>
+                          Eat · +{FOOD[r]!.hunger} food
+                        </button>
+                      )}
                     </article>
                   );
                 })}
@@ -693,10 +704,10 @@ export default function Panels(props: Props) {
                 <b>3 Seeds:</b> R cycles unlocked crops; plant empty beds.{' '}
                 <b>4 Water:</b> water growing crops. <b>5 Build:</b> plans and
                 placement. <b>6 Hands:</b> harvest crops, forage, collect
-                relics. <b>7 Rod:</b> fish.
+                relics. <b>7 Rod:</b> fish. <b>8 Spear:</b> hunt wildlife.
               </p>
               <p>
-                <b>Mouse wheel or 1–7 selects tools. B opens building plans.</b>{' '}
+                <b>Mouse wheel or 1–8 selects tools. B opens building plans.</b>{' '}
                 R rotates a build preview; scrolling switches tools and cancels
                 placement. <b>E uses your equipped tool.</b> The interaction
                 prompt tells you which tool is needed. Talk, refill water, use
@@ -724,7 +735,28 @@ export default function Panels(props: Props) {
                 within 14m, away from paths’ residents, shore, crops, and other
                 structures. Harvested resource footprints stay reserved for
                 regrowth. R rotates, Enter or click places, Esc cancels. Pack
-                buildings from My Village for a full materials refund.
+                buildings from My Village to refund original construction
+                materials; upgrade materials are not refunded.
+              </p>
+              <h3>Snacks are a survival strategy.</h3>
+              <p>
+                F eats a carried meal; G drinks from your canteen. Hunger and
+                thirst drain while you play, and low supplies slow movement and
+                recovery. Empty supplies damage health. The goose ambulance
+                returns you to camp if you collapse. Menus pause your needs.
+                Refill drinking water at the spring or a well; cook hunted meat
+                before eating. Rabbits are easy prey; boars hurt if approached
+                too closely.
+              </p>
+              <h3>Upgrade, explore, and bring a friend.</h3>
+              <p>
+                U opens equipment, workshop upgrades, repeatable expeditions,
+                landmark clues, and provisions. Better stations unlock leather,
+                steel, machinery and expedition meals. Find eight landmarks and
+                revisit their caches. L opens four-player camps: create a shared
+                copy of your island or join with a friend’s code. Materials,
+                buildings, farms and quests are shared; hunger, thirst and
+                health are personal. Leaving restores your solo island.
               </p>
               <h3>Workshops and wildlife.</h3>
               <p>
@@ -882,8 +914,8 @@ export default function Panels(props: Props) {
                 </button>
               </div>
               <p className="panel-note">
-                Your progress autosaves on this device. Export a copy to take
-                your island with you.
+                Solo progress saves on this device; co-op camps save online.
+                Export a copy to take your island with you.
               </p>
               <div className="settings-footer">
                 <button

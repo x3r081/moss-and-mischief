@@ -24,6 +24,7 @@ export function registerGameTools(
   registry: Registry | undefined,
   state: () => GameState,
   changed: () => void,
+  dispatch?: (recipe: 'plank' | 'bread') => Promise<unknown>,
 ) {
   const life = new AbortController();
   if (!registry?.registerTool) return () => life.abort();
@@ -85,6 +86,7 @@ export function registerGameTools(
           throw new Error('Build the required station first.');
         if (!canAfford(s, RECIPES[r].cost))
           throw new Error('Not enough ingredients.');
+        if (dispatch) return dispatch(r);
         const message = craft(s, r);
         changed();
         return { message, inventory: { ...s.inventory } };

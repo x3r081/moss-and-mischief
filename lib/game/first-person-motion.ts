@@ -24,7 +24,8 @@ export type MotionAction =
   | 'water'
   | 'build'
   | 'rod'
-  | 'reel';
+  | 'reel'
+  | 'spear';
 
 export type MotionTiming = Readonly<{
   duration: number;
@@ -32,6 +33,7 @@ export type MotionTiming = Readonly<{
 }>;
 
 export const MOTION_TIMING: Readonly<Record<MotionAction, MotionTiming>> = {
+  spear: { duration: 0.62, impact: 0.42 },
   axe: { duration: 0.65, impact: 0.4 },
   pickaxe: { duration: 0.75, impact: 0.5 },
   hands: { duration: 0.65, impact: 0.48 },
@@ -52,6 +54,7 @@ const TOOL_NAMES: readonly HeldTool[] = [
   'water',
   'build',
   'rod',
+  'spear',
 ];
 
 type RestTransform = {
@@ -151,6 +154,7 @@ export class FirstPersonMotion {
   private readonly water: THREE.Group;
   private readonly build: THREE.Group;
   private readonly rod: THREE.Group;
+  private readonly spear: THREE.Group;
 
   private active: MotionAction = 'hands';
 
@@ -169,6 +173,7 @@ export class FirstPersonMotion {
     this.water = requireGroup(rig, 'tool-water');
     this.build = requireGroup(rig, 'tool-build');
     this.rod = requireGroup(rig, 'tool-rod');
+    this.spear = requireGroup(rig, 'tool-spear');
 
     const priorLeftPivot = rig.getObjectByName('fp-motion-left-pivot');
     const priorRightPivot = rig.getObjectByName('fp-motion-right-pivot');
@@ -193,6 +198,7 @@ export class FirstPersonMotion {
     this.attachTool(this.water);
     this.attachTool(this.build);
     this.attachTool(this.rod);
+    this.attachTool(this.spear);
 
     const existingLeftThumb = rig.getObjectByName('fp-left-thumb');
     const existingRightThumb = rig.getObjectByName('fp-right-thumb');
@@ -238,6 +244,23 @@ export class FirstPersonMotion {
     const t = clamp01(progress);
     if (t === 0 || t === 1) return;
     switch (action) {
+      case 'spear': {
+        const thrust =
+          t < 0.28
+            ? -smooth(t / 0.28) * 0.15
+            : t < 0.45
+              ? mix(-0.15, 0.52, outCubic((t - 0.28) / 0.17))
+              : 0.52 * (1 - smooth((t - 0.45) / 0.55));
+        this.setRight(
+          -thrust * 0.2,
+          thrust * 0.12,
+          -thrust,
+          0,
+          -thrust * 0.15,
+          thrust * 0.1,
+        );
+        break;
+      }
       case 'axe':
         this.poseAxe(t);
         break;
@@ -315,6 +338,8 @@ export class FirstPersonMotion {
         return this.rod;
       case 'reel':
         return this.rod;
+      case 'spear':
+        return this.spear;
     }
   }
 

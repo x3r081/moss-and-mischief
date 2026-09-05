@@ -1,0 +1,801 @@
+{
+  "main": [
+    {
+      "id": "peril-orientation",
+      "act": 7,
+      "title": "Orientation for the Reasonably Alarmed",
+      "short": "Complete a frontier trail patrol",
+      "detail": "Report to Rowan Bramble and complete the Department of Mild Peril's beginner trail expedition. It is mostly walking, with forms.",
+      "quote": "Danger is just nature wearing an unofficial hat.",
+      "npc": "ranger",
+      "objectives": [
+        {
+          "key": "expedition:trail",
+          "target": 1,
+          "label": "Complete a trail expedition"
+        }
+      ],
+      "reward": { "coins": 260, "xp": 360 }
+    },
+    {
+      "id": "rabbit-procedure",
+      "act": 7,
+      "title": "The Rabbit Procedure",
+      "short": "Hunt two woodland rabbits",
+      "detail": "Craft a basic spear at a workbench, then track two rabbits beyond the village paths.",
+      "quote": "If it zigzags, stay calm. If you zigzag, call it fieldcraft.",
+      "npc": "ranger",
+      "objectives": [
+        { "key": "hunt:rabbit", "target": 2, "label": "Hunt rabbits" }
+      ],
+      "reward": { "coins": 275, "xp": 375 }
+    },
+    {
+      "id": "first-frontier-supper",
+      "act": 7,
+      "title": "Rarely Served Rare",
+      "short": "Cook and eat frontier meat",
+      "detail": "Turn fresh game into cooked meat at a campfire, then eat a portion to prove the recipe is legally supper.",
+      "quote": "If it is still making eye contact, give it another minute.",
+      "npc": "baker",
+      "objectives": [
+        { "key": "craft:cookedmeat", "target": 2, "label": "Cook meat" },
+        { "key": "eat:cookedmeat", "target": 1, "label": "Eat cooked meat" }
+      ],
+      "reward": { "coins": 285, "xp": 390 }
+    },
+    {
+      "id": "tea-and-sympathy",
+      "act": 7,
+      "title": "Tea and Mild Sympathy",
+      "short": "Improve the fire and brew berry tea",
+      "detail": "Upgrade a campfire to level two, combine wild berries and herbs into berry tea, then have a drink.",
+      "quote": "It tastes like courage remembering it left the kettle on.",
+      "npc": "botanist",
+      "objectives": [
+        {
+          "key": "upgrade:campfire:2",
+          "target": 1,
+          "label": "Upgrade a campfire to level 2"
+        },
+        { "key": "craft:berrytea", "target": 2, "label": "Brew berry tea" },
+        { "key": "drink", "target": 2, "label": "Drink refreshments" }
+      ],
+      "reward": { "coins": 305, "xp": 420 }
+    },
+    {
+      "id": "field-office",
+      "act": 7,
+      "title": "A Desk for the Wilderness",
+      "short": "Open the frontier workbench",
+      "detail": "Upgrade a workbench to level two, tan leather, twist rope, improve the canteen, and reach two survived days.",
+      "quote": "Survival begins with water and ends with a surprisingly detailed receipt.",
+      "npc": "mayor",
+      "objectives": [
+        {
+          "key": "upgrade:workbench:2",
+          "target": 1,
+          "label": "Upgrade a workbench to level 2"
+        },
+        { "key": "craft:leather", "target": 2, "label": "Craft leather" },
+        { "key": "craft:rope", "target": 4, "label": "Craft rope" },
+        {
+          "key": "gear:canteen:2",
+          "target": 1,
+          "label": "Upgrade the canteen to level 2"
+        },
+        {
+          "key": "survival:days",
+          "target": 2,
+          "label": "Survive two frontier days"
+        }
+      ],
+      "reward": { "coins": 335, "xp": 455 }
+    },
+    {
+      "id": "campfire-certification",
+      "act": 7,
+      "title": "Certified Field Kitchen",
+      "short": "Cook roast and broth",
+      "detail": "Use the level two campfire to prepare two roasts and two restorative broths.",
+      "quote": "An upgraded fire is exactly like fire, but with paperwork nearby.",
+      "npc": "baker",
+      "objectives": [
+        { "key": "craft:roast", "target": 2, "label": "Cook roasts" },
+        { "key": "craft:broth", "target": 2, "label": "Cook broth" }
+      ],
+      "reward": { "coins": 330, "xp": 450 }
+    },
+
+    {
+      "id": "spear-point-policy",
+      "act": 8,
+      "title": "A Pointed Policy",
+      "short": "Upgrade the hunting spear",
+      "detail": "Bring the hunting spear to level two. Keep the point toward the wilderness.",
+      "quote": "The pointy end is policy. The other end is procedure.",
+      "npc": "smith",
+      "objectives": [
+        {
+          "key": "gear:spear:2",
+          "target": 1,
+          "label": "Upgrade the spear to level 2"
+        }
+      ],
+      "reward": { "coins": 320, "xp": 440 }
+    },
+    {
+      "id": "rabbit-census",
+      "act": 8,
+      "title": "A Rapid Rabbit Census",
+      "short": "Track six rabbits",
+      "detail": "Bring the career rabbit count to six and sample the cooked-meat reserves on patrol.",
+      "quote": "The rabbits declined to complete their census forms.",
+      "npc": "ranger",
+      "objectives": [
+        { "key": "hunt:rabbit", "target": 6, "label": "Hunt rabbits" },
+        { "key": "eat:cookedmeat", "target": 2, "label": "Eat cooked meat" }
+      ],
+      "reward": { "coins": 335, "xp": 460 }
+    },
+    {
+      "id": "boar-bluff",
+      "act": 8,
+      "title": "Calling Their Bluff",
+      "short": "Find Boar Bluff and hunt boars",
+      "detail": "Locate Boar Bluff and deal with three boars who mistook the trail signs for a buffet.",
+      "quote": "A boar is a pig with confidence and worse meeting etiquette.",
+      "npc": "ranger",
+      "objectives": [
+        {
+          "key": "discover:boar-bluff",
+          "target": 1,
+          "label": "Discover Boar Bluff"
+        },
+        { "key": "hunt:boar", "target": 3, "label": "Hunt boars" }
+      ],
+      "reward": { "coins": 355, "xp": 485 }
+    },
+    {
+      "id": "deer-department",
+      "act": 8,
+      "title": "Oh Deer, A Department",
+      "short": "Track three deer",
+      "detail": "Track three deer without being distracted by their superior posture.",
+      "quote": "They heard you coming yesterday. Try apologizing to fewer twigs.",
+      "npc": "ranger",
+      "objectives": [{ "key": "hunt:deer", "target": 3, "label": "Hunt deer" }],
+      "reward": { "coins": 365, "xp": 500 }
+    },
+    {
+      "id": "leather-weather",
+      "act": 8,
+      "title": "Leather Weather",
+      "short": "Tan leather and improve your boots",
+      "detail": "Bring the leather total to six and upgrade your boots for trails that have become personally muddy.",
+      "quote": "Good boots keep the ground at a respectful distance.",
+      "npc": "smith",
+      "objectives": [
+        { "key": "craft:leather", "target": 6, "label": "Craft leather" },
+        {
+          "key": "gear:boots:2",
+          "target": 1,
+          "label": "Upgrade boots to level 2"
+        }
+      ],
+      "reward": { "coins": 380, "xp": 520 }
+    },
+    {
+      "id": "hunter-field-test",
+      "act": 8,
+      "title": "Licensed to Lunch",
+      "short": "Complete a hunter expedition",
+      "detail": "Cook six career portions of meat and complete a hunter expedition. Friends may join, but the permit is valid for one.",
+      "quote": "Bring company if you like. The bushes remain unimpressed either way.",
+      "npc": "ranger",
+      "objectives": [
+        { "key": "craft:cookedmeat", "target": 6, "label": "Cook meat" },
+        {
+          "key": "expedition:hunter",
+          "target": 1,
+          "label": "Complete a hunter expedition"
+        }
+      ],
+      "reward": { "coins": 400, "xp": 545 }
+    },
+
+    {
+      "id": "picnic-ruins",
+      "act": 9,
+      "title": "The Picnic That Time Forgot",
+      "short": "Explore the picnic ruins",
+      "detail": "Discover the Picnic Ruins and recover two treasures without trusting the ancient sandwiches.",
+      "quote": "History is written by the victors. Lunch is wrapped in wax paper.",
+      "npc": "astronomer",
+      "objectives": [
+        {
+          "key": "discover:picnic-ruins",
+          "target": 1,
+          "label": "Discover the Picnic Ruins"
+        },
+        { "key": "treasure", "target": 2, "label": "Recover treasures" }
+      ],
+      "reward": { "coins": 380, "xp": 520 }
+    },
+    {
+      "id": "steel-department",
+      "act": 9,
+      "title": "A Steely Department",
+      "short": "Upgrade the forge and make steel",
+      "detail": "Upgrade the forge to level two and produce eight steel before attempting masterwork stations.",
+      "quote": "Steel is iron that attended a very intense seminar.",
+      "npc": "smith",
+      "objectives": [
+        {
+          "key": "upgrade:forge:2",
+          "target": 1,
+          "label": "Upgrade the forge to level 2"
+        },
+        { "key": "craft:steel", "target": 8, "label": "Forge steel" }
+      ],
+      "reward": { "coins": 430, "xp": 590 }
+    },
+    {
+      "id": "roast-office",
+      "act": 9,
+      "title": "Smoke Signals in Triplicate",
+      "short": "Master the campfire and make jerky",
+      "detail": "Use steel and leather to upgrade a campfire to level three, then smoke three strips of jerky.",
+      "quote": "Lunch now has a longer shelf life than most committees.",
+      "npc": "baker",
+      "objectives": [
+        {
+          "key": "upgrade:campfire:3",
+          "target": 1,
+          "label": "Upgrade a campfire to level 3"
+        },
+        { "key": "craft:jerky", "target": 3, "label": "Craft jerky" }
+      ],
+      "reward": { "coins": 420, "xp": 575 }
+    },
+    {
+      "id": "broth-authority",
+      "act": 9,
+      "title": "The Broth Authority",
+      "short": "Upgrade the tavern and simmer broth",
+      "detail": "Upgrade the tavern to level two and bring the career broth total to four bowls.",
+      "quote": "Soup is tea that has accepted additional responsibilities.",
+      "npc": "baker",
+      "objectives": [
+        {
+          "key": "upgrade:tavern:2",
+          "target": 1,
+          "label": "Upgrade the tavern to level 2"
+        },
+        { "key": "craft:broth", "target": 4, "label": "Cook broth" }
+      ],
+      "reward": { "coins": 395, "xp": 540 }
+    },
+    {
+      "id": "taste-testing",
+      "act": 9,
+      "title": "Taste Testing Is Work",
+      "short": "Test frontier food and tea",
+      "detail": "Bring the roast total to four, eat two roasts, brew six berry teas, and log five drinks.",
+      "quote": "Quality control is just seconds with a clipboard.",
+      "npc": "baker",
+      "objectives": [
+        { "key": "craft:roast", "target": 4, "label": "Cook roasts" },
+        { "key": "eat:roast", "target": 2, "label": "Eat roasts" },
+        { "key": "craft:berrytea", "target": 6, "label": "Brew berry tea" },
+        { "key": "drink", "target": 5, "label": "Drink refreshments" }
+      ],
+      "reward": { "coins": 420, "xp": 575 }
+    },
+    {
+      "id": "master-workbench",
+      "act": 9,
+      "title": "Bench Press Release",
+      "short": "Master the workbench",
+      "detail": "Upgrade the workbench to level three and bring the career rope total to twelve before assembling machinery.",
+      "quote": "This bench now has more qualifications than the mayor.",
+      "npc": "smith",
+      "objectives": [
+        {
+          "key": "upgrade:workbench:3",
+          "target": 1,
+          "label": "Upgrade the workbench to level 3"
+        },
+        { "key": "craft:rope", "target": 12, "label": "Craft rope" }
+      ],
+      "reward": { "coins": 455, "xp": 625 }
+    },
+
+    {
+      "id": "machinery-permit",
+      "act": 10,
+      "title": "Machinery, Probably",
+      "short": "Upgrade the kiln and assemble machinery",
+      "detail": "Upgrade the kiln to level two, then use the master workbench to assemble four clockwork parts.",
+      "quote": "If it spins, it is machinery. If it flies away, update the form.",
+      "npc": "smith",
+      "objectives": [
+        {
+          "key": "upgrade:kiln:2",
+          "target": 1,
+          "label": "Upgrade the kiln to level 2"
+        },
+        { "key": "craft:machinery", "target": 4, "label": "Assemble machinery" }
+      ],
+      "reward": { "coins": 445, "xp": 610 }
+    },
+    {
+      "id": "chef-expedition",
+      "act": 10,
+      "title": "Meals on Heels",
+      "short": "Pack rations and complete a chef expedition",
+      "detail": "Use the master workbench and smoked jerky to craft eight career trail rations, then complete a chef expedition.",
+      "quote": "Outdoor dining is indoor dining with more wind in the napkins.",
+      "npc": "baker",
+      "objectives": [
+        {
+          "key": "craft:trailration",
+          "target": 8,
+          "label": "Craft trail rations"
+        },
+        {
+          "key": "expedition:chef",
+          "target": 1,
+          "label": "Complete a chef expedition"
+        }
+      ],
+      "reward": { "coins": 450, "xp": 615 }
+    },
+    {
+      "id": "cut-and-dig",
+      "act": 10,
+      "title": "Cut and Dig Bureau",
+      "short": "Improve axe and pickaxe",
+      "detail": "Upgrade the axe and pickaxe to level two for the Department's sturdier obstacles.",
+      "quote": "One tool makes fewer trees. The other makes more holes.",
+      "npc": "smith",
+      "objectives": [
+        {
+          "key": "gear:axe:2",
+          "target": 1,
+          "label": "Upgrade the axe to level 2"
+        },
+        {
+          "key": "gear:pickaxe:2",
+          "target": 1,
+          "label": "Upgrade the pickaxe to level 2"
+        }
+      ],
+      "reward": { "coins": 465, "xp": 640 }
+    },
+    {
+      "id": "canteen-confidence",
+      "act": 10,
+      "title": "Hydration with Confidence",
+      "short": "Master the canteen and endure four days",
+      "detail": "Use the master workbench and clockwork parts to upgrade the canteen to level three, then reach four survived days.",
+      "quote": "Water is the traditional cure for accidentally becoming a raisin.",
+      "npc": "botanist",
+      "objectives": [
+        {
+          "key": "gear:canteen:3",
+          "target": 1,
+          "label": "Upgrade the canteen to level 3"
+        },
+        {
+          "key": "survival:days",
+          "target": 4,
+          "label": "Survive four frontier days"
+        }
+      ],
+      "reward": { "coins": 430, "xp": 590 }
+    },
+    {
+      "id": "master-tools",
+      "act": 10,
+      "title": "Sharper Than the Forms",
+      "short": "Master axe and pickaxe",
+      "detail": "Raise both frontier tools to level three using steel, leather, and clockwork parts.",
+      "quote": "A sharp tool saves time. A sharp form creates more forms.",
+      "npc": "smith",
+      "objectives": [
+        {
+          "key": "gear:axe:3",
+          "target": 1,
+          "label": "Upgrade the axe to level 3"
+        },
+        {
+          "key": "gear:pickaxe:3",
+          "target": 1,
+          "label": "Upgrade the pickaxe to level 3"
+        }
+      ],
+      "reward": { "coins": 480, "xp": 660 }
+    },
+    {
+      "id": "builder-expedition",
+      "act": 10,
+      "title": "Constructive Criticism",
+      "short": "Upgrade the shed and lead a build",
+      "detail": "Upgrade a shed to level two and complete a builder expedition. A crew is welcome, never required.",
+      "quote": "Measure twice, build once, describe the wobble as rustic.",
+      "npc": "mayor",
+      "objectives": [
+        {
+          "key": "upgrade:shed:2",
+          "target": 1,
+          "label": "Upgrade a shed to level 2"
+        },
+        {
+          "key": "expedition:builder",
+          "target": 1,
+          "label": "Complete a builder expedition"
+        }
+      ],
+      "reward": { "coins": 500, "xp": 685 }
+    },
+
+    {
+      "id": "old-camp",
+      "act": 11,
+      "title": "Camp, Abandoned",
+      "short": "Discover the Old Camp",
+      "detail": "Locate the Old Camp and raise the treasure tally to three. The cold kettle is not treasure.",
+      "quote": "Someone left in a hurry, but alphabetized the firewood first.",
+      "npc": "ranger",
+      "objectives": [
+        {
+          "key": "discover:old-camp",
+          "target": 1,
+          "label": "Discover the Old Camp"
+        },
+        { "key": "treasure", "target": 3, "label": "Recover treasures" }
+      ],
+      "reward": { "coins": 470, "xp": 645 }
+    },
+    {
+      "id": "whisper-falls",
+      "act": 11,
+      "title": "The Falls Have Ears",
+      "short": "Discover Whisper Falls",
+      "detail": "Find Whisper Falls and investigate why it sounds like someone reading minutes from a meeting.",
+      "quote": "The waterfall whispers. Mostly it says splash, but with conviction.",
+      "npc": "ranger",
+      "objectives": [
+        {
+          "key": "discover:whisper-falls",
+          "target": 1,
+          "label": "Discover Whisper Falls"
+        }
+      ],
+      "reward": { "coins": 475, "xp": 650 }
+    },
+    {
+      "id": "moon-pond",
+      "act": 11,
+      "title": "A Reflection on Tea",
+      "short": "Discover Moon Pond",
+      "detail": "Find Moon Pond and bring the career refreshment count to eight. Do not drink directly from astronomy.",
+      "quote": "The moon looks lovely in the pond and terrible in a canteen.",
+      "npc": "astronomer",
+      "objectives": [
+        {
+          "key": "discover:moon-pond",
+          "target": 1,
+          "label": "Discover Moon Pond"
+        },
+        { "key": "drink", "target": 8, "label": "Drink refreshments" }
+      ],
+      "reward": { "coins": 485, "xp": 665 }
+    },
+    {
+      "id": "smugglers-cove",
+      "act": 11,
+      "title": "Cove Operations",
+      "short": "Explore Smugglers' Cove",
+      "detail": "Discover Smugglers' Cove and recover six career treasures without adopting a cursed barrel.",
+      "quote": "Everything here is legal if you squint at the paperwork.",
+      "npc": "fisher",
+      "objectives": [
+        {
+          "key": "discover:smugglers-cove",
+          "target": 1,
+          "label": "Discover Smugglers' Cove"
+        },
+        { "key": "treasure", "target": 6, "label": "Recover treasures" }
+      ],
+      "reward": { "coins": 510, "xp": 695 }
+    },
+    {
+      "id": "moss-cave",
+      "act": 11,
+      "title": "Moss Definitely Grows Here",
+      "short": "Discover Moss Cave",
+      "detail": "Find Moss Cave and complete a forager expedition through its extremely committed greenery.",
+      "quote": "The cave is damp, dark, and winning several gardening awards.",
+      "npc": "botanist",
+      "objectives": [
+        {
+          "key": "discover:moss-cave",
+          "target": 1,
+          "label": "Discover Moss Cave"
+        },
+        {
+          "key": "expedition:forager",
+          "target": 1,
+          "label": "Complete a forager expedition"
+        }
+      ],
+      "reward": { "coins": 515, "xp": 705 }
+    },
+    {
+      "id": "explorer-field-exam",
+      "act": 11,
+      "title": "The Map Is Mostly Correct",
+      "short": "Complete an explorer expedition",
+      "detail": "Complete an explorer expedition and bring the treasure record to eight discoveries. Solo maps are free.",
+      "quote": "A blank patch on a map is just adventure with poor handwriting.",
+      "npc": "astronomer",
+      "objectives": [
+        {
+          "key": "expedition:explorer",
+          "target": 1,
+          "label": "Complete an explorer expedition"
+        },
+        { "key": "treasure", "target": 8, "label": "Recover treasures" }
+      ],
+      "reward": { "coins": 540, "xp": 735 }
+    },
+
+    {
+      "id": "frontier-footing",
+      "act": 12,
+      "title": "Sure Footing, Sharp Point",
+      "short": "Master boots and spear",
+      "detail": "Upgrade boots and spear to level three, then reach seven survived frontier days.",
+      "quote": "Preparedness is confidence with better soles.",
+      "npc": "ranger",
+      "objectives": [
+        {
+          "key": "gear:boots:3",
+          "target": 1,
+          "label": "Upgrade boots to level 3"
+        },
+        {
+          "key": "gear:spear:3",
+          "target": 1,
+          "label": "Upgrade the spear to level 3"
+        },
+        {
+          "key": "survival:days",
+          "target": 7,
+          "label": "Survive seven frontier days"
+        }
+      ],
+      "reward": { "coins": 525, "xp": 720 }
+    },
+    {
+      "id": "comfortable-peril",
+      "act": 12,
+      "title": "Peril, but Comfortable",
+      "short": "Upgrade cottage and well",
+      "detail": "Upgrade a cottage and well to level two. Survival is nicer with a roof and fewer bucket errands.",
+      "quote": "Comfort is danger observed through a properly glazed window.",
+      "npc": "mayor",
+      "objectives": [
+        {
+          "key": "upgrade:cottage:2",
+          "target": 1,
+          "label": "Upgrade a cottage to level 2"
+        },
+        {
+          "key": "upgrade:well:2",
+          "target": 1,
+          "label": "Upgrade a well to level 2"
+        }
+      ],
+      "reward": { "coins": 535, "xp": 730 }
+    },
+    {
+      "id": "frontier-hospitality",
+      "act": 12,
+      "title": "Advanced Hospitality",
+      "short": "Improve greenhouse and tavern",
+      "detail": "Upgrade the greenhouse to level two and the tavern to level three for year-round hospitality.",
+      "quote": "Grow the herbs upstairs. Tell the stories downstairs.",
+      "npc": "baker",
+      "objectives": [
+        {
+          "key": "upgrade:greenhouse:2",
+          "target": 1,
+          "label": "Upgrade the greenhouse to level 2"
+        },
+        {
+          "key": "upgrade:tavern:3",
+          "target": 1,
+          "label": "Upgrade the tavern to level 3"
+        }
+      ],
+      "reward": { "coins": 550, "xp": 750 }
+    },
+    {
+      "id": "industrial-mildness",
+      "act": 12,
+      "title": "Industrial Mildness",
+      "short": "Master forge and kiln",
+      "detail": "Upgrade the forge and kiln to level three and bring the career machinery total to eight.",
+      "quote": "The workshop now hums. We asked it to use an indoor voice.",
+      "npc": "smith",
+      "objectives": [
+        {
+          "key": "upgrade:forge:3",
+          "target": 1,
+          "label": "Upgrade the forge to level 3"
+        },
+        {
+          "key": "upgrade:kiln:3",
+          "target": 1,
+          "label": "Upgrade the kiln to level 3"
+        },
+        { "key": "craft:machinery", "target": 8, "label": "Assemble machinery" }
+      ],
+      "reward": { "coins": 570, "xp": 775 }
+    },
+    {
+      "id": "star-summit",
+      "act": 12,
+      "title": "The Highest Filing Cabinet",
+      "short": "Reach Star Summit",
+      "detail": "Discover Star Summit and complete three career trail expeditions. Companions are welcome; solitude is certified.",
+      "quote": "The view is breathtaking. The climb has already taken credit.",
+      "npc": "astronomer",
+      "objectives": [
+        {
+          "key": "discover:star-summit",
+          "target": 1,
+          "label": "Discover Star Summit"
+        },
+        {
+          "key": "expedition:trail",
+          "target": 3,
+          "label": "Complete trail expeditions"
+        }
+      ],
+      "reward": { "coins": 590, "xp": 800 }
+    },
+    {
+      "id": "permit-to-thrive",
+      "act": 12,
+      "title": "Permit to Thrive",
+      "short": "Earn the Department's highest permit",
+      "detail": "Raise a cottage to level three, reach ten survived days, and log ten treasures.",
+      "quote": "Congratulations. You are licensed to encounter danger at your own sensible pace.",
+      "npc": "mayor",
+      "objectives": [
+        {
+          "key": "upgrade:cottage:3",
+          "target": 1,
+          "label": "Upgrade a cottage to level 3"
+        },
+        {
+          "key": "survival:days",
+          "target": 10,
+          "label": "Survive ten frontier days"
+        },
+        { "key": "treasure", "target": 10, "label": "Recover treasures" }
+      ],
+      "reward": { "coins": 700, "xp": 1000 }
+    }
+  ],
+  "contracts": [
+    {
+      "id": "frontier-rabbit-ledger",
+      "title": "Rabbit Ledger Reconciliation",
+      "npc": "ranger",
+      "description": "Turn in field samples after the rabbits refuse to sign the ledger.",
+      "cost": { "rawmeat": 3, "hide": 2 },
+      "reward": { "coins": 70, "xp": 48 }
+    },
+    {
+      "id": "frontier-trail-repair",
+      "title": "Trail Mix-Up",
+      "npc": "ranger",
+      "description": "Supply rope and steel for a bridge Rowan describes as mostly theoretical.",
+      "cost": { "rope": 4, "steel": 2 },
+      "reward": { "coins": 92, "xp": 62 }
+    },
+    {
+      "id": "frontier-berry-survey",
+      "title": "Berry Official Business",
+      "npc": "botanist",
+      "description": "Provide berries and herbs for a survey that looks remarkably like tea.",
+      "cost": { "berries": 8, "herbs": 4 },
+      "reward": { "coins": 68, "xp": 46 }
+    },
+    {
+      "id": "frontier-herbal-pantry",
+      "title": "Seasoned Judgment",
+      "npc": "botanist",
+      "description": "Restock Petal's pantry before the herbs become academically wilted.",
+      "cost": { "herbs": 6, "salt": 2 },
+      "reward": { "coins": 74, "xp": 50 }
+    },
+    {
+      "id": "frontier-jerky-patrol",
+      "title": "The Long Chew",
+      "npc": "ranger",
+      "description": "Pack jerky for a patrol whose route was designed by someone already eating.",
+      "cost": { "jerky": 4 },
+      "reward": { "coins": 78, "xp": 52 }
+    },
+    {
+      "id": "frontier-leather-order",
+      "title": "Hide and Receipt",
+      "npc": "smith",
+      "description": "Ember needs leather for protective aprons and one formal tool belt.",
+      "cost": { "hide": 5, "leather": 3 },
+      "reward": { "coins": 86, "xp": 58 }
+    },
+    {
+      "id": "frontier-broth-round",
+      "title": "Broth of Confidence",
+      "npc": "baker",
+      "description": "Deliver broth and cooked meat to a field office pretending not to be cold.",
+      "cost": { "broth": 3, "cookedmeat": 2 },
+      "reward": { "coins": 82, "xp": 56 }
+    },
+    {
+      "id": "frontier-roast-night",
+      "title": "Roast in Show",
+      "npc": "baker",
+      "description": "Stock the tavern supper before Mayor Honk volunteers as tester.",
+      "cost": { "roast": 2, "berrytea": 2 },
+      "reward": { "coins": 90, "xp": 60 }
+    },
+    {
+      "id": "frontier-machine-parts",
+      "title": "Parts Unknown",
+      "npc": "smith",
+      "description": "Supply machinery and steel for a device Ember has named Later.",
+      "cost": { "machinery": 2, "steel": 4 },
+      "reward": { "coins": 110, "xp": 74 }
+    },
+    {
+      "id": "frontier-rigging-order",
+      "title": "A Taut Situation",
+      "npc": "fisher",
+      "description": "Captain Minnow needs leather and rope for expedition rigging.",
+      "cost": { "leather": 4, "rope": 3 },
+      "reward": { "coins": 94, "xp": 64 }
+    },
+    {
+      "id": "frontier-coin-rubbings",
+      "title": "Ancient Change",
+      "npc": "astronomer",
+      "description": "Loan ancient coins for rubbings. Puddlewick returns the history attached.",
+      "cost": { "ancientcoin": 3 },
+      "reward": { "coins": 105, "xp": 72 }
+    },
+    {
+      "id": "frontier-summit-pack",
+      "title": "Peak Provisions",
+      "npc": "mayor",
+      "description": "Prepare rations and tea for climbers who mistook optimism for breakfast.",
+      "cost": { "trailration": 4, "berrytea": 2 },
+      "reward": { "coins": 96, "xp": 66 }
+    }
+  ],
+  "actNames": [
+    "Orientation for the Reasonably Alarmed",
+    "Teeth, Tracks, and Paperwork",
+    "Field Rations and Other Luxuries",
+    "Tools of the Mildly Dangerous Trade",
+    "Cartography with Consequences",
+    "Licensed to Thrive"
+  ]
+}

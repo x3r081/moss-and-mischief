@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { makeSpear } from './frontier-models';
 
 /**
  * Camera-local first-person models for Moss & Mischief.
@@ -432,6 +433,7 @@ export function makeFirstPersonRig(): THREE.Group {
     'build',
     'hands',
     'rod',
+    'spear',
   ];
 
   addArms(root);
@@ -443,6 +445,7 @@ export function makeFirstPersonRig(): THREE.Group {
     makeBuildTool(),
     makeHandsTool(),
     makeRodTool(),
+    makeSpear(),
   ];
   for (const tool of tools) {
     tool.visible = tool.name === 'tool-hands';

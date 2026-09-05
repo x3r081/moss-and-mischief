@@ -27,6 +27,22 @@ export const RESOURCE_NAMES = {
   stew: 'Forest stew',
   feast: 'Festival feast',
   coins: 'Acorns',
+  rawmeat: 'Wild meat',
+  cookedmeat: 'Campfire skewers',
+  hide: 'Hides',
+  leather: 'Leather',
+  berries: 'Berries',
+  herbs: 'Wild herbs',
+  salt: 'Sea salt',
+  steel: 'Steel',
+  rope: 'Rope',
+  jerky: 'Smoked jerky',
+  berrytea: 'Berry tea',
+  trailration: 'Trail rations',
+  roast: 'Sunday roast',
+  broth: 'Restorative broth',
+  machinery: 'Clockwork parts',
+  ancientcoin: 'Ancient acorns',
 } as const;
 export type Resource = keyof typeof RESOURCE_NAMES;
 export type Inventory = Record<Resource, number>;
@@ -59,7 +75,17 @@ export type Craftable =
   | 'cloth'
   | 'starglass'
   | 'pie'
-  | 'feast';
+  | 'feast'
+  | 'cookedmeat'
+  | 'leather'
+  | 'steel'
+  | 'rope'
+  | 'jerky'
+  | 'berrytea'
+  | 'trailration'
+  | 'roast'
+  | 'broth'
+  | 'machinery';
 export type Project =
   | 'lighthouse'
   | 'bridge'
@@ -74,7 +100,8 @@ export type Tool =
   | 'water'
   | 'build'
   | 'hands'
-  | 'rod';
+  | 'rod'
+  | 'spear';
 export const TOOL_NAMES: Record<Tool, string> = {
   axe: 'Axe · 1',
   pickaxe: 'Pickaxe · 2',
@@ -83,18 +110,110 @@ export const TOOL_NAMES: Record<Tool, string> = {
   build: 'Build · 5',
   hands: 'Hands · 6',
   rod: 'Fishing rod · 7',
+  spear: 'Hunting spear · 8',
 };
 export type Recipe = {
   name: string;
   cost: Partial<Inventory>;
   description: string;
   station?: Structure;
+  stationLevel?: number;
   unlock: number;
   category: 'building' | 'material' | 'food' | 'project';
   size?: [number, number];
   output?: number;
 };
 export const RECIPES: Record<Structure | Craftable | Project, Recipe> = {
+  cookedmeat: {
+    name: 'Campfire skewers',
+    cost: { rawmeat: 2, wood: 1 },
+    description: 'Food on a stick. Humanity peaked early.',
+    station: 'campfire',
+    unlock: 0,
+    category: 'food',
+  },
+  leather: {
+    name: 'Leather',
+    cost: { hide: 2, salt: 1 },
+    description: 'Weatherproof fabric, formerly weatherproof wildlife.',
+    station: 'workbench',
+    stationLevel: 2,
+    unlock: 0,
+    category: 'material',
+  },
+  rope: {
+    name: 'Rope',
+    cost: { fiber: 4 },
+    description: 'String with managerial ambitions.',
+    station: 'workbench',
+    stationLevel: 2,
+    unlock: 0,
+    category: 'material',
+  },
+  steel: {
+    name: 'Steel',
+    cost: { iron: 2, wood: 3 },
+    description: 'Metal that has completed its probation.',
+    station: 'forge',
+    stationLevel: 2,
+    unlock: 0,
+    category: 'material',
+  },
+  machinery: {
+    name: 'Clockwork parts',
+    cost: { steel: 2, rope: 2 },
+    description: 'Complicated enough to require a tiny clipboard.',
+    station: 'workbench',
+    stationLevel: 3,
+    unlock: 0,
+    category: 'material',
+  },
+  jerky: {
+    name: 'Smoked jerky',
+    cost: { rawmeat: 2, salt: 1 },
+    description: 'Lunch that can survive your planning skills.',
+    station: 'campfire',
+    stationLevel: 3,
+    unlock: 0,
+    category: 'food',
+  },
+  berrytea: {
+    name: 'Berry tea',
+    cost: { berries: 3, herbs: 1 },
+    description: 'A warm hug with absolutely no goose in it.',
+    station: 'campfire',
+    stationLevel: 2,
+    unlock: 0,
+    category: 'food',
+  },
+  trailration: {
+    name: 'Trail rations',
+    cost: { jerky: 1, bread: 1, berries: 2 },
+    description: 'A whole picnic in a suspiciously small parcel.',
+    station: 'workbench',
+    stationLevel: 3,
+    unlock: 0,
+    category: 'food',
+  },
+  roast: {
+    name: 'Sunday roast',
+    cost: { rawmeat: 3, carrot: 3, herbs: 2 },
+    description: 'It is always Sunday if nobody owns a calendar.',
+    station: 'campfire',
+    stationLevel: 2,
+    unlock: 0,
+    category: 'food',
+  },
+  broth: {
+    name: 'Restorative broth',
+    cost: { rawmeat: 1, herbs: 3, mushroom: 2 },
+    description: 'The doctor is a goose. This is your second opinion.',
+    station: 'campfire',
+    stationLevel: 2,
+    unlock: 0,
+    category: 'food',
+  },
+
   workbench: {
     name: 'Workbench',
     cost: { wood: 5, stone: 3 },

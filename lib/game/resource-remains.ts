@@ -330,12 +330,16 @@ function makeAppleRemains(): THREE.Group {
 /** Create the low remains left after a resource node has been harvested. */
 export function makeResourceRemains(kind: string): THREE.Group {
   switch (kind) {
+    case 'salt':
+      return makeRubbleRemains('stone');
     case 'wood':
       return makeWoodRemains();
     case 'stone':
     case 'ore':
     case 'clay':
       return makeRubbleRemains(kind);
+    case 'berries':
+    case 'herbs':
     case 'fiber':
       return makeFiberRemains();
     case 'mushroom':
