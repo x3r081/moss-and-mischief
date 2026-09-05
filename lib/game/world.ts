@@ -50,6 +50,17 @@ import {
   type LookMode,
 } from './first-person';
 import { heightAt, onLand, shoreRadius } from './terrain';
+import {
+  makeResourceRemains,
+  disposeResourceRemains,
+} from './resource-remains';
+import { RESOURCE_KINDS, harvestedLabel } from './resource-status';
+import { canAnimateInteraction } from './interactions';
+import {
+  FirstPersonMotion,
+  MOTION_TIMING,
+  type MotionAction,
+} from './first-person-motion';
 export { heightAt, onLand, shoreRadius, LAND_RADIUS } from './terrain';
 
 export type Entity = {
@@ -88,7 +99,7 @@ export type WorldEvents = {
   near: (e: Entity | null) => void;
   look: (mode: LookMode) => void;
   placement: (valid: boolean, message: string) => void;
-  interact: (e: Entity) => void;
+  interact: (e: Entity, actionTime?: number) => boolean;
   place: (type: Structure, x: number, z: number, rotation: number) => void;
   menu: (name: string) => void;
   move: (x: number, z: number, stamina: number) => void;
@@ -125,6 +136,11 @@ export class IslandWorld {
   private lookMode: LookMode = 'free';
   private expectedUnlock = false;
   private requestingLock = false;
+  private lookRequest = 0;
+  private followPointer = false;
+  private followEdge = new THREE.Vector2();
+  private wheelDelta = 0;
+  private lastWheel = 0;
   private pointerId: number | null = null;
   private pointerOrigin = new THREE.Vector2();
   private pointerLast = new THREE.Vector2();
@@ -137,6 +153,7 @@ export class IslandWorld {
   private viewScene = new THREE.Scene();
   private viewCamera = new THREE.PerspectiveCamera(72, 1, 0.025, 4);
   private handRig = makeFirstPersonRig();
+  private handMotion = new FirstPersonMotion(this.handRig);
   private ground!: THREE.Mesh;
   private water!: THREE.Mesh<THREE.PlaneGeometry, THREE.ShaderMaterial>;
   private sun = new THREE.DirectionalLight(0xffe1a0, 3.3);
@@ -169,6 +186,10 @@ export class IslandWorld {
   private grid: THREE.InstancedMesh | null = null;
   private gridCenter = new THREE.Vector2(999, 999);
   private lastPlacementMessage = '';
+  private resourceVisuals = new Map<
+    string,
+    { live: THREE.Object3D; remains: THREE.Group }
+  >();
   private equipped: Tool | null = null;
   private last = 0;
   private frame = 0;
@@ -177,7 +198,17 @@ export class IslandWorld {
   private jump = 0;
   private headOffset = 0;
   private jumpSpeed = 0;
-  private swing = 0;
+  private action: {
+    tool: Tool;
+    motion: MotionAction;
+    elapsed: number;
+    hit: boolean;
+    requestedAt: number;
+    target?: Entity;
+    building?: { type: Structure; x: number; z: number; rotation: number };
+  } | null = null;
+  private actionMaterials = new Map<Tool, THREE.MeshBasicMaterial>();
+  private chipGeo = new THREE.BoxGeometry(0.13, 0.045, 0.065);
   private resizeObserver: ResizeObserver;
   private abort = new AbortController();
   private resourceGeo = new THREE.IcosahedronGeometry(0.09, 0);
@@ -234,6 +265,7 @@ export class IslandWorld {
     this.createVillage();
     this.createNature();
     this.createExpansion();
+    this.prepareResourceVisuals();
     this.createAtmosphere();
     this.staticAimMeshes = this.collectAimMeshes(this.scene);
     this.rebuildAimMeshes();
@@ -1135,22 +1167,40 @@ export class IslandWorld {
         )
     );
   }
+  private prepareResourceVisuals() {
+    for (const e of this.entities) {
+      if (!RESOURCE_KINDS.includes(e.kind)) continue;
+      const live = e.object,
+        parent = live.parent!;
+      const root = new THREE.Group();
+      root.position.copy(live.position);
+      live.position.set(0, 0, 0);
+      const remains = makeResourceRemains(e.kind);
+      remains.visible = false;
+      root.add(live, remains);
+      parent.add(root);
+      e.object = root;
+      this.resourceVisuals.set(e.id, { live, remains });
+    }
+  }
+  private syncResources(now = Date.now()) {
+    const s = this.state();
+    for (const e of this.entities) {
+      const visual = this.resourceVisuals.get(e.id);
+      if (!visual) continue;
+      const depleted = (s.depleted[e.id] ?? 0) > now;
+      visual.live.visible = !depleted;
+      visual.remains.visible = depleted;
+      e.object.userData.harvested = depleted;
+      e.object.userData.harvestedLabel = harvestedLabel(e.kind);
+    }
+  }
   private equipTool() {
     const tool = this.state().tool;
     if (tool === this.equipped) return;
+    this.cancelAction();
     this.equipped = tool;
-    for (const t of [
-      'axe',
-      'pickaxe',
-      'seeds',
-      'water',
-      'build',
-      'hands',
-      'rod',
-    ]) {
-      const model = this.handRig.getObjectByName(`tool-${t}`);
-      if (model) model.visible = t === tool;
-    }
+    this.handMotion.pose(tool, null);
   }
   private createAtmosphere() {
     const rand = random(90),
@@ -1208,7 +1258,7 @@ export class IslandWorld {
       () => {
         this.requestingLock = false;
         if (document.pointerLockElement === el) {
-          if (this.paused) {
+          if (this.paused || this.lookMode === 'free') {
             this.releaseLook();
             return;
           }
@@ -1229,7 +1279,7 @@ export class IslandWorld {
       'pointerlockerror',
       () => {
         this.requestingLock = false;
-        if (!this.paused) emitMode('drag');
+        // Button-free follow look is already active while capture is pending.
       },
       { signal },
     );
@@ -1273,7 +1323,7 @@ export class IslandWorld {
         }
         if (this.paused) return;
         if (e.code === 'Tab' && !e.repeat) {
-          if (this.lookMode === 'locked') this.releaseLook();
+          if (this.lookMode !== 'free') this.releaseLook();
           else this.requestLook();
           return;
         }
@@ -1340,7 +1390,16 @@ export class IslandWorld {
           this.requestLook();
           return;
         }
+        if (e.pointerType === 'mouse' && this.lookMode === 'follow') {
+          if (e.button === 0) {
+            if (this.buildType) this.confirmBuild();
+            else this.interact();
+          }
+          return;
+        }
         if (e.pointerType !== 'mouse') {
+          this.followPointer = false;
+          this.followEdge.set(0, 0);
           emitMode('touch');
         } else if (e.button !== 0 && e.button !== 2) return;
         this.pointerId = e.pointerId;
@@ -1354,12 +1413,31 @@ export class IslandWorld {
     el.addEventListener(
       'pointermove',
       (e) => {
-        if (
-          this.paused ||
-          document.pointerLockElement === el ||
-          this.pointerId !== e.pointerId
-        )
+        if (this.paused || document.pointerLockElement === el) return;
+        if (e.pointerType === 'mouse' && this.lookMode === 'touch')
+          this.useMouseLook();
+        if (e.pointerType === 'mouse' && this.lookMode === 'follow') {
+          if (this.followPointer)
+            this.turn(
+              e.clientX - this.pointerLast.x,
+              e.clientY - this.pointerLast.y,
+            );
+          this.pointerLast.set(e.clientX, e.clientY);
+          this.followPointer = true;
+          const r = el.getBoundingClientRect();
+          const edge = (v: number, min: number, max: number) =>
+            v < min + 32
+              ? -Math.max(0, 1 - (v - min) / 32)
+              : v > max - 32
+                ? Math.max(0, 1 - (max - v) / 32)
+                : 0;
+          this.followEdge.set(
+            edge(e.clientX, r.left, r.right),
+            edge(e.clientY, r.top, r.bottom),
+          );
           return;
+        }
+        if (this.pointerId !== e.pointerId) return;
         const dx = e.clientX - this.pointerLast.x,
           dy = e.clientY - this.pointerLast.y;
         this.pointerLast.set(e.clientX, e.clientY);
@@ -1374,6 +1452,13 @@ export class IslandWorld {
       },
       { signal },
     );
+    const resetFollow = () => {
+      this.followPointer = false;
+      this.followEdge.set(0, 0);
+      this.wheelDelta = 0;
+    };
+    el.addEventListener('pointerenter', resetFollow, { signal });
+    el.addEventListener('pointerleave', resetFollow, { signal });
     const endPointer = (e: PointerEvent) => {
       if (this.pointerConsumed) {
         this.pointerConsumed = false;
@@ -1408,21 +1493,33 @@ export class IslandWorld {
       (e) => {
         if (this.paused) return;
         e.preventDefault();
-        if (this.buildType) this.rotateBuild();
-        else {
-          const tools: Tool[] = [
-            'axe',
-            'pickaxe',
-            'seeds',
-            'water',
-            'build',
-            'hands',
-            'rod',
-          ];
-          let i = tools.indexOf(this.state().tool);
-          i = (i + (e.deltaY > 0 ? 1 : 6)) % 7;
-          this.events.menu(`Digit${i + 1}`);
-        }
+        if (!Number.isFinite(e.deltaY) || e.deltaY === 0) return;
+        const now = performance.now();
+        if (
+          now - this.lastWheel > 180 ||
+          Math.sign(e.deltaY) !== Math.sign(this.wheelDelta)
+        )
+          this.wheelDelta = 0;
+        this.lastWheel = now;
+        this.wheelDelta +=
+          e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 100 : 1);
+        if (Math.abs(this.wheelDelta) < 40) return;
+        const direction = Math.sign(this.wheelDelta);
+        this.wheelDelta = 0;
+        const tools: Tool[] = [
+          'axe',
+          'pickaxe',
+          'seeds',
+          'water',
+          'build',
+          'hands',
+          'rod',
+        ];
+        const next =
+          (tools.indexOf(this.state().tool) + direction + tools.length) %
+          tools.length;
+        // Cycling through the hammer must not open a modal or rotate a preview.
+        this.events.menu(`tool:${tools[next]}`);
       },
       { signal, passive: false },
     );
@@ -1435,42 +1532,43 @@ export class IslandWorld {
     )
       return;
     if (window.matchMedia('(pointer: coarse)').matches) {
-      this.useDragLook(true);
+      this.useMouseLook(true);
       return;
     }
     const el = this.renderer.domElement;
     el.focus({ preventScroll: true });
-    if (typeof el.requestPointerLock !== 'function') {
-      this.useDragLook();
-      return;
-    }
+    // Start useful mouse look immediately, even in hosts that deny or ignore capture.
+    this.useMouseLook();
+    if (typeof el.requestPointerLock !== 'function') return;
     this.requestingLock = true;
+    const request = this.lookRequest;
     try {
       const result = el.requestPointerLock();
       if (result && typeof result.catch === 'function')
         void result.catch(() => {
-          this.requestingLock = false;
-          if (!this.paused) this.useDragLook();
+          if (request === this.lookRequest) this.requestingLock = false;
         });
     } catch {
       this.requestingLock = false;
-      this.useDragLook();
     }
   }
   releaseLook() {
+    this.lookRequest++;
+    this.requestingLock = false;
     this.expectedUnlock = true;
     this.keys.clear();
     this.pointerId = null;
+    this.followPointer = false;
+    this.followEdge.set(0, 0);
+    this.wheelDelta = 0;
+    this.lookMode = 'free';
+    this.events.look('free');
     if (document.pointerLockElement === this.renderer.domElement)
       document.exitPointerLock();
-    else {
-      this.lookMode = 'free';
-      this.events.look('free');
-    }
   }
-  useDragLook(touch = false) {
+  useMouseLook(touch = false) {
     this.releaseLook();
-    this.lookMode = touch ? 'touch' : 'drag';
+    this.lookMode = touch ? 'touch' : 'follow';
     this.events.look(this.lookMode);
   }
   private turn(dx: number, dy: number) {
@@ -1503,7 +1601,10 @@ export class IslandWorld {
     this.paused = paused;
     this.keys.clear();
     this.pointerId = null;
-    if (paused) this.releaseLook();
+    if (paused) {
+      this.releaseLook();
+      this.cancelAction();
+    }
   }
   hop() {
     if (!this.paused && this.jump <= 0) this.jumpSpeed = 5;
@@ -1559,13 +1660,73 @@ export class IslandWorld {
     return focused;
   }
   interact() {
-    if (this.paused) return;
+    if (this.paused || this.action) return;
     const target = this.updateFocus();
-    if (target) {
-      this.events.interact(target);
-      this.swing = 0.42;
-      this.burst(target.x, target.z);
+    if (!target) {
+      if (this.state().tool === 'build') this.events.menu('build');
+      return;
     }
+    const s = this.state();
+    if (!canAnimateInteraction(s, target.kind, target.id)) {
+      this.events.interact(target);
+      return;
+    }
+    this.action = {
+      tool: s.tool,
+      motion: s.tool === 'rod' && s.fishing?.id === target.id ? 'reel' : s.tool,
+      elapsed: 0,
+      hit: false,
+      target,
+      requestedAt: Date.now(),
+    };
+  }
+  private cancelAction() {
+    this.action = null;
+    this.handMotion?.reset();
+  }
+  private advanceAction(dt: number) {
+    const action = this.action;
+    if (!action) return;
+    if (this.paused || this.state().tool !== action.tool) {
+      this.cancelAction();
+      return;
+    }
+    action.elapsed += dt;
+    const timing = MOTION_TIMING[action.motion];
+    const progress = Math.min(1, action.elapsed / timing.duration);
+    this.handMotion.pose(action.motion, progress);
+    if (!action.hit && progress >= timing.impact) {
+      // Latch before calling game/UI callbacks: an impact can only apply once.
+      action.hit = true;
+      if (action.target) {
+        const current = this.updateFocus();
+        if (
+          current?.id === action.target.id &&
+          !(this.state().depleted[current.id] > Date.now())
+        ) {
+          const changed = this.events.interact(
+            current,
+            action.motion === 'reel' ? action.requestedAt : undefined,
+          );
+          if (changed) this.burst(current.x, current.z, action.tool);
+        }
+      } else if (action.building) {
+        this.updateGhost();
+        const b = action.building;
+        if (
+          this.buildType === b.type &&
+          this.rotation === b.rotation &&
+          this.validGhost &&
+          Math.hypot(this.ghostPoint.x - b.x, this.ghostPoint.z - b.z) < 0.75 &&
+          this.canPlace(b.type, b.x, b.z, b.rotation)
+        ) {
+          this.events.place(b.type, b.x, b.z, b.rotation);
+          this.burst(b.x, b.z, 'build');
+          this.setBuild(null);
+        }
+      }
+    }
+    if (progress >= 1 && this.action === action) this.cancelAction();
   }
   setBuild(type: Structure | null) {
     this.buildType = type;
@@ -1688,17 +1849,22 @@ export class IslandWorld {
     this.updateGrid();
   }
   confirmBuild() {
-    if (this.paused || !this.buildType) return;
+    if (this.paused || !this.buildType || this.action) return;
     this.updateGhost();
     if (this.validGhost) {
-      const type = this.buildType;
-      this.events.place(
-        type,
-        this.ghostPoint.x,
-        this.ghostPoint.z,
-        this.rotation,
-      );
-      this.setBuild(null);
+      this.action = {
+        tool: this.state().tool,
+        motion: 'build',
+        elapsed: 0,
+        hit: false,
+        requestedAt: Date.now(),
+        building: {
+          type: this.buildType,
+          x: this.ghostPoint.x,
+          z: this.ghostPoint.z,
+          rotation: this.rotation,
+        },
+      };
     }
   }
   private updateGrid() {
@@ -1906,24 +2072,34 @@ export class IslandWorld {
     }
     if (changed) this.rebuildAimMeshes();
     this.equipTool();
-    for (const e of this.entities) {
-      if (
-        ['wood', 'stone', 'fiber', 'ore', 'clay', 'mushroom', 'apple'].includes(
-          e.kind,
-        )
-      ) {
-        const depleted = (state.depleted[e.id] ?? 0) > Date.now();
-        e.object.scale.setScalar(
-          (e.object.userData.originalScale ??= e.object.scale.x) *
-            (depleted ? 0.65 : 1),
-        );
-      }
-    }
+    this.syncResources();
   }
-  burst(x: number, z: number) {
+  burst(x: number, z: number, tool?: Tool) {
+    let surface = this.resourceMat;
+    if (tool) {
+      const colors = {
+        axe: 0xc79358,
+        pickaxe: 0xa6b6b4,
+        hands: 0x9cc878,
+        seeds: 0xe2bb69,
+        water: 0x80dfe9,
+        build: 0xffd781,
+        rod: 0x80dfe9,
+      };
+      if (!this.actionMaterials.has(tool))
+        this.actionMaterials.set(
+          tool,
+          new THREE.MeshBasicMaterial({ color: colors[tool] }),
+        );
+      surface = this.actionMaterials.get(tool)!;
+    }
     for (let i = 0; i < 9; i++) {
-      const mesh = new THREE.Mesh(this.resourceGeo, this.resourceMat);
-      mesh.position.set(x, heightAt(x, z) + 0.5, z);
+      const mesh = new THREE.Mesh(
+        tool === 'axe' ? this.chipGeo : this.resourceGeo,
+        surface,
+      );
+      mesh.position.set(x, heightAt(x, z) + (tool === 'axe' ? 1.2 : 0.45), z);
+      mesh.rotation.set(Math.random() * 3, Math.random() * 3, 0);
       this.scene.add(mesh);
       this.particles.push({
         mesh,
@@ -1958,6 +2134,8 @@ export class IslandWorld {
     const s = this.state();
     if (!this.paused) {
       s.elapsed += dt;
+      if (this.lookMode === 'follow' && this.followPointer)
+        this.turn(this.followEdge.x * dt * 650, this.followEdge.y * dt * 450);
       let strafe = 0,
         forward = 0;
       if (this.keys.has('KeyW')) forward++;
@@ -2011,15 +2189,12 @@ export class IslandWorld {
         s.player.z,
       );
       this.camera.rotation.set(s.view.pitch, s.view.yaw, 0, 'YXZ');
-      if (this.swing > 0) this.swing = Math.max(0, this.swing - dt);
-      const swing = Math.sin((this.swing / 0.42) * Math.PI);
+      this.advanceAction(dt);
       this.handRig.position.set(
-        moving ? Math.sin(this.clock * 7) * 0.012 : 0,
-        -swing * 0.06 +
-          (moving ? Math.abs(Math.sin(this.clock * 7)) * 0.008 : 0),
-        -swing * 0.14,
+        moving && !this.action ? Math.sin(this.clock * 7) * 0.012 : 0,
+        moving && !this.action ? Math.abs(Math.sin(this.clock * 7)) * 0.008 : 0,
+        0,
       );
-      this.handRig.rotation.set(-swing * 0.3, 0, swing * 0.12);
       if (this.clock - this.lastAim > 0.065) {
         this.updateFocus();
         this.lastAim = this.clock;
@@ -2132,6 +2307,11 @@ export class IslandWorld {
     disposeAssetLibrary();
     disposeExtraModelLibrary();
     disposeFirstPersonModels();
+    disposeResourceRemains();
+    this.resourceGeo.dispose();
+    this.resourceMat.dispose();
+    this.chipGeo.dispose();
+    this.actionMaterials.forEach((m) => m.dispose());
     this.renderer.dispose();
     this.renderer.domElement.remove();
   }

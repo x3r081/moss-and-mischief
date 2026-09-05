@@ -73,12 +73,29 @@ export class IslandAudio {
       this.tone(2400, t + 0.46, 0.16, 0.014);
     }
   }
-  effect(kind: 'gather' | 'build' | 'farm' | 'honk' | 'win' | 'craft') {
+  effect(
+    kind:
+      | 'gather'
+      | 'build'
+      | 'farm'
+      | 'honk'
+      | 'win'
+      | 'craft'
+      | 'chop'
+      | 'mine',
+  ) {
     if (!this.enabled || !this.context) return;
     const t = this.context.currentTime;
     if (kind === 'honk') {
       this.tone(220, t, 0.18, 0.24, 'sawtooth');
       this.tone(196, t + 0.15, 0.23, 0.18, 'triangle');
+    } else if (kind === 'chop') {
+      this.tone(105, t, 0.1, 0.38, 'triangle');
+      this.tone(58, t + 0.035, 0.16, 0.28, 'sine');
+    } else if (kind === 'mine') {
+      this.tone(1250, t, 0.08, 0.18, 'triangle');
+      this.tone(1850, t + 0.01, 0.14, 0.075, 'sine');
+      this.tone(130, t, 0.1, 0.28, 'triangle');
     } else if (kind === 'win') {
       [261.63, 329.63, 392, 523.25].forEach((f, i) =>
         this.tone(f, t + i * 0.17, 2, 0.3),

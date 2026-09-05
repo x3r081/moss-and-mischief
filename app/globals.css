@@ -2885,3 +2885,28 @@ kbd {
   border-right: 1px solid #bdd5a33d;
   margin-right: 2px;
 }
+
+.mouse-captured .world canvas {
+  cursor: none;
+}
+.crosshair.depleted {
+  color: #a9aca0;
+  opacity: 0.55;
+}
+.interact-prompt.depleted {
+  opacity: 0.8;
+  border-color: #919984;
+  cursor: default;
+}
+.interact-prompt.depleted kbd {
+  opacity: 0.4;
+}
+
+/* While aiming, HUD cards must not interrupt mouse movement over the scene. */
+.mouse-captured .quest-card,
+.mouse-captured .game-header > *,
+.mouse-captured .location-label,
+.mouse-captured .energy,
+.mouse-captured .build-hint {
+  pointer-events: none;
+}

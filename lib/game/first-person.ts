@@ -9,7 +9,7 @@ export type ViewSettings = {
   sensitivity: number;
   bob: boolean;
 };
-export type LookMode = 'free' | 'locked' | 'drag' | 'touch';
+export type LookMode = 'free' | 'locked' | 'follow' | 'touch';
 export const DEFAULT_VIEW: ViewSettings = {
   yaw: Math.PI / 4,
   pitch: -0.08,

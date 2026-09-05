@@ -1,4 +1,6 @@
 'use client';
+import { interactionSnapshot } from '@/lib/game/interactions';
+import { harvestedLabel, regrowthSeconds } from '@/lib/game/resource-status';
 import { useEffect, useRef, useState } from 'react';
 import {
   Sprout,
@@ -144,29 +146,23 @@ export default function Game() {
       );
     return saved;
   };
-  const selectTool = (tool: Tool) => {
+  const selectTool = (tool: Tool, openPlans = true) => {
     data.current.tool = tool;
     world.current?.setBuild(null);
     setPlacing(null);
-    if (tool === 'build') setPanel('build');
+    if (tool === 'build' && openPlans) setPanel('build');
     refresh();
   };
-  const act = (entity: Entity) => {
+  const act = (entity: Entity, actionTime?: number) => {
     const s = data.current,
       needed = requiredTool(s, entity.kind, entity.id);
     if (needed && s.tool !== needed) {
       notify(toolError(s, needed));
-      return;
+      return false;
     }
     let message = '';
     const wasWon = s.won;
-    audio.current?.effect(
-      entity.kind === 'goose'
-        ? 'honk'
-        : entity.kind === 'plot'
-          ? 'farm'
-          : 'gather',
-    );
+    const before = interactionSnapshot(s, entity.id);
     if (
       ['wood', 'stone', 'fiber', 'ore', 'clay', 'mushroom', 'apple'].includes(
         entity.kind,
@@ -212,7 +208,7 @@ export default function Game() {
     } else if (entity.kind === 'lighthouse') message = restoreLighthouse(s);
     else if (entity.kind === 'project')
       message = performProject(s, entity.id as Project);
-    else if (entity.kind === 'fish') message = fish(s, entity.id);
+    else if (entity.kind === 'fish') message = fish(s, entity.id, actionTime);
     else if (entity.kind === 'relic') message = collectRelic(s, entity.id);
     else if (entity.kind === 'spring') {
       s.water = 24;
@@ -235,6 +231,19 @@ export default function Game() {
           '+2 timber · +2 stone · +2 fiber. The sea has excellent delivery service.';
       } else message = 'More supplies arrive in a minute.';
     }
+    const changed = before !== interactionSnapshot(s, entity.id);
+    if (changed || entity.kind === 'goose' || entity.kind === 'npc')
+      audio.current?.effect(
+        entity.kind === 'goose'
+          ? 'honk'
+          : entity.kind === 'wood'
+            ? 'chop'
+            : ['stone', 'clay', 'ore'].includes(entity.kind)
+              ? 'mine'
+              : entity.kind === 'plot'
+                ? 'farm'
+                : 'gather',
+      );
     if (message) notify(message);
     refresh();
     persist();
@@ -242,6 +251,7 @@ export default function Game() {
       setWin(true);
       audio.current?.effect('win');
     }
+    return changed;
   };
   useEffect(() => {
     audio.current = new IslandAudio();
@@ -261,7 +271,7 @@ export default function Game() {
           notify(build(data.current, type, x, z, rotation));
           audio.current?.effect('build');
           setPlacing(null);
-          data.current.tool = 'axe';
+          data.current.tool = 'build';
           refresh();
           persist();
         },
@@ -283,6 +293,9 @@ export default function Game() {
             setPanel((v) => (v ? '' : 'pause'));
             setDialogue('');
             setPlacing(null);
+          } else if (name.startsWith('tool:')) {
+            const tool = toolset.find(([id]) => id === name.slice(5));
+            if (tool) selectTool(tool[0], false);
           } else if (name.startsWith('Digit')) {
             const index = Number(name.slice(-1)) - 1;
             if (toolset[index]) {
@@ -391,7 +404,7 @@ export default function Game() {
   };
   return (
     <main
-      className={`game-shell first-person ${lookMode === 'locked' ? 'mouse-captured' : ''}`}
+      className={`game-shell first-person ${lookMode === 'locked' || lookMode === 'follow' ? 'mouse-captured' : ''}`}
     >
       <div ref={host} className="world" />
       <div className="vignette" />
@@ -494,7 +507,7 @@ export default function Game() {
           </div>
           {!panel && !dialogue && !win && (
             <div
-              className={`crosshair ${near ? 'on-target' : ''} ${placing ? (placementInfo.valid ? 'place-valid' : 'place-blocked') : ''}`}
+              className={`crosshair ${near ? (regrowthSeconds(snapshot.depleted, near.id) ? 'depleted' : 'on-target') : ''} ${placing ? (placementInfo.valid ? 'place-valid' : 'place-blocked') : ''}`}
               aria-hidden="true"
             >
               <i />
@@ -512,18 +525,20 @@ export default function Game() {
               </button>
               <button
                 className="drag-choice"
-                onClick={() => world.current?.useDragLook()}
+                onClick={() => world.current?.useMouseLook()}
               >
-                Use drag look
+                Use free mouse look
               </button>
             </div>
           )}
           {!panel &&
             !dialogue &&
             !win &&
-            (lookMode === 'drag' || lookMode === 'touch') && (
+            (lookMode === 'follow' || lookMode === 'touch') && (
               <div className="look-instruction">
-                Drag the scene to look · Aim at the crosshair · E or tap to use
+                {lookMode === 'touch'
+                  ? 'Drag to look · E or tap to use'
+                  : 'Move mouse to look · At screen edge, keep turning · Tab frees cursor'}
               </div>
             )}
           <div className="resource-strip">
@@ -590,20 +605,27 @@ export default function Game() {
           </div>
           {near && !placing && (
             <button
-              className="interact-prompt"
+              className={`interact-prompt ${regrowthSeconds(snapshot.depleted, near.id) ? 'depleted' : ''}`}
+              disabled={regrowthSeconds(snapshot.depleted, near.id) > 0}
               onClick={() => world.current?.interact()}
             >
               <kbd>E</kbd>
               <span>
-                {near.name}
+                {regrowthSeconds(snapshot.depleted, near.id)
+                  ? harvestedLabel(near.kind)
+                  : near.name}
                 <small>
-                  {requiredTool(snapshot, near.kind, near.id)
-                    ? snapshot.tool ===
-                      requiredTool(snapshot, near.kind, near.id)
-                      ? 'Ready · ' + TOOL_NAMES[snapshot.tool]
-                      : 'Equip ' +
-                        TOOL_NAMES[requiredTool(snapshot, near.kind, near.id)!]
-                    : 'Interact with any tool'}
+                  {regrowthSeconds(snapshot.depleted, near.id) > 0
+                    ? `Harvested · regrows in ${regrowthSeconds(snapshot.depleted, near.id)}s`
+                    : requiredTool(snapshot, near.kind, near.id)
+                      ? snapshot.tool ===
+                        requiredTool(snapshot, near.kind, near.id)
+                        ? 'Ready · ' + TOOL_NAMES[snapshot.tool]
+                        : 'Equip ' +
+                          TOOL_NAMES[
+                            requiredTool(snapshot, near.kind, near.id)!
+                          ]
+                      : 'Interact with any tool'}
                 </small>
               </span>
               <ChevronRight size={17} />

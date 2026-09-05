@@ -681,10 +681,11 @@ export default function Panels(props: Props) {
               <p>
                 Tab releases the cursor for the toolbar. Escape pauses and frees
                 the cursor. Closing a menu leaves the mouse free until you click
-                the scene again. If mouse capture is unavailable, choose Drag
-                look: hold and drag the scene to look, then tap or press E to
-                use. On touch screens, drag the scene to look and use the
-                movement pad and Use button. Arrow keys also turn the view.
+                the scene again. If mouse capture is unavailable, mouse movement
+                still turns the view without holding a button. Move to the edge
+                of the scene to keep turning; Tab frees the cursor. On touch
+                screens, drag the scene to look and use the movement pad and Use
+                button. Arrow keys also turn the view.
               </p>
               <h3>Your tools have jobs.</h3>
               <p>
@@ -695,13 +696,20 @@ export default function Panels(props: Props) {
                 relics. <b>7 Rod:</b> fish.
               </p>
               <p>
-                <b>E uses your equipped tool.</b> The interaction prompt tells
-                you which tool is needed. Talk, refill water, use stations and
-                contribute to projects with any tool. Aim at the object within
-                reach and press E or left-click. Objects behind walls cannot be
-                used.
+                <b>Mouse wheel or 1–7 selects tools. B opens building plans.</b>{' '}
+                R rotates a build preview; scrolling switches tools and cancels
+                placement. <b>E uses your equipped tool.</b> The interaction
+                prompt tells you which tool is needed. Talk, refill water, use
+                stations and contribute to projects with any tool. Aim at the
+                object within reach and press E or left-click. Objects behind
+                walls cannot be used.
               </p>
               <h3>Grow a little more.</h3>
+              <p>
+                Cut trees leave short stumps, deposits leave rubble, and forage
+                leaves clipped patches. They cannot be harvested again until
+                regrown. Aim at the remains to see how long is left.
+              </p>
               <p>
                 Watered carrots take 70 seconds, wheat 95, lavender 110, and
                 pumpkins 140. Unwatered plants grow slowly. Harvests return
@@ -714,7 +722,8 @@ export default function Panels(props: Props) {
                 The green grid shows where the entire selected building fits.
                 Red cells are blocked. The preview explains the reason. Build
                 within 14m, away from paths’ residents, shore, crops, and other
-                structures. R rotates, Enter or click places, Esc cancels. Pack
+                structures. Harvested resource footprints stay reserved for
+                regrowth. R rotates, Enter or click places, Esc cancels. Pack
                 buildings from My Village for a full materials refund.
               </p>
               <h3>Workshops and wildlife.</h3>

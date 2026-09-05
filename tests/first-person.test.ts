@@ -13,7 +13,18 @@ import {
   visibleInTree,
 } from '../lib/game/first-person';
 import { makeFirstPersonRig } from '../lib/game/first-person-models';
-import { initialState, parseSave } from '../lib/game/state';
+import { initialState, parseSave, gather, farm } from '../lib/game/state';
+import {
+  FirstPersonMotion,
+  MOTION_TIMING,
+  type MotionAction,
+} from '../lib/game/first-person-motion';
+import { makeResourceRemains } from '../lib/game/resource-remains';
+import { regrowthSeconds } from '../lib/game/resource-status';
+import {
+  canAnimateInteraction,
+  interactionSnapshot,
+} from '../lib/game/interactions';
 import { IslandWorld } from '../lib/game/world';
 import { heightAt } from '../lib/game/terrain';
 
@@ -192,6 +203,11 @@ function inputHarness(failLock = false) {
     lookMode: 'free',
     expectedUnlock: false,
     requestingLock: false,
+    lookRequest: 0,
+    followPointer: false,
+    followEdge: new THREE.Vector2(),
+    wheelDelta: 0,
+    lastWheel: 0,
     pointerId: null,
     pointerOrigin: new THREE.Vector2(),
     pointerLast: new THREE.Vector2(),
@@ -203,6 +219,10 @@ function inputHarness(failLock = false) {
       menu: (m: string) => {
         menus.push(m);
         if (['pause', 'craft'].includes(m)) w.setPaused(true);
+        if (m.startsWith('tool:')) {
+          s.tool = m.slice(5) as typeof s.tool;
+          w.buildType = null;
+        }
       },
     },
     interact: () => uses++,
@@ -261,7 +281,7 @@ void test('first click captures without acting; Tab frees the mouse; menus relea
     const freeYaw = h.s.view.yaw;
     h.doc.dispatchEvent(event('mousemove', { movementX: 40, movementY: 10 }));
     assert.equal(h.s.view.yaw, freeYaw);
-    assert.deepEqual(h.menus, []);
+    assert.equal(h.menus.length, 0);
     h.w.requestLook();
     h.win.dispatchEvent(event('keydown', { code: 'KeyC', repeat: false }));
     assert.equal(h.w.paused, true);
@@ -273,11 +293,11 @@ void test('first click captures without acting; Tab frees the mouse; menus relea
     h.cleanup();
   }
 });
-void test('blocked mouse capture falls back to drag look, and touch drags never trigger an action', () => {
+void test('blocked mouse capture falls back to button-free look, and touch drags never trigger an action', () => {
   const h = inputHarness(true);
   try {
     h.w.requestLook();
-    assert.equal(h.modes.at(-1), 'drag');
+    assert.equal(h.modes.at(-1), 'follow');
     assert.equal(h.w.requestingLock, false);
     const down = {
       pointerType: 'touch',
@@ -446,4 +466,424 @@ void test('first-person placement follows current heading, uses live feet positi
   w.updateGhost();
   assert.equal(w.validGhost, false);
   assert.equal(w.ghost.visible, false);
+});
+
+void test('fallback follows mouse without buttons, resets on re-entry, and Tab frees it', () => {
+  const h = inputHarness(true);
+  try {
+    h.w.requestLook();
+    const move = (x: number, y = 350) =>
+      h.el.dispatchEvent(
+        event('pointermove', {
+          pointerType: 'mouse',
+          pointerId: 1,
+          buttons: 0,
+          clientX: x,
+          clientY: y,
+        }),
+      );
+    const start = h.s.view.yaw;
+    move(500);
+    assert.equal(h.s.view.yaw, start, 'first event establishes position');
+    move(560, 340);
+    assert.notEqual(h.s.view.yaw, start, 'no mouse button required');
+    const turned = h.s.view.yaw;
+    h.el.dispatchEvent(event('pointerleave'));
+    h.el.dispatchEvent(event('pointerenter'));
+    move(10);
+    assert.equal(h.s.view.yaw, turned, 're-entry does not jump');
+    assert.ok(h.w.followEdge.x < 0, 'edge continuation supports full turns');
+    h.el.dispatchEvent(
+      event('pointerdown', { pointerType: 'mouse', pointerId: 1, button: 0 }),
+    );
+    assert.equal(h.counts().uses, 1);
+    h.win.dispatchEvent(event('keydown', { code: 'Tab', repeat: false }));
+    move(400);
+    assert.equal(h.s.view.yaw, turned);
+    assert.equal(h.w.followEdge.length(), 0);
+    assert.equal(h.modes.at(-1), 'free');
+  } finally {
+    h.cleanup();
+  }
+});
+void test('wheel cycles all tools through hammer without opening menus, wraps, and ignores zero or paused input', () => {
+  const h = inputHarness();
+  try {
+    const wheel = (deltaY: number, deltaMode = 0) =>
+      h.el.dispatchEvent(event('wheel', { deltaY, deltaMode }));
+    wheel(0);
+    assert.equal(h.menus.length, 0);
+    wheel(12);
+    wheel(12);
+    wheel(12);
+    assert.equal(h.s.tool, 'axe');
+    wheel(12);
+    assert.equal(h.s.tool, 'pickaxe');
+    wheel(100);
+    wheel(100);
+    wheel(100);
+    assert.equal(h.s.tool, 'build');
+    assert.equal(h.w.paused, false);
+    h.w.buildType = 'cottage';
+    wheel(100);
+    assert.equal(h.s.tool, 'hands');
+    assert.equal(h.w.buildType, null);
+    wheel(100);
+    wheel(100);
+    assert.equal(h.s.tool, 'axe');
+    wheel(-3, 1);
+    assert.equal(h.s.tool, 'rod');
+    assert.ok(
+      h.menus.every((m) => m.startsWith('tool:')),
+      'no build modal interrupts cycling',
+    );
+    h.w.setPaused(true);
+    wheel(100);
+    assert.equal(h.s.tool, 'rod');
+    assert.equal(h.w.wheelDelta, 0);
+  } finally {
+    h.cleanup();
+  }
+});
+void test('late rejected capture cannot reactivate mouse look after Tab or a menu', async () => {
+  const h = inputHarness();
+  try {
+    let reject!: (reason: Error) => void;
+    h.el.requestPointerLock = () =>
+      new Promise<void>((_resolve, r) => {
+        reject = r;
+      });
+    h.w.requestLook();
+    assert.equal(h.w.lookMode, 'follow');
+    h.w.releaseLook();
+    reject(new Error('denied late'));
+    await Promise.resolve();
+    assert.equal(h.w.lookMode, 'free');
+    assert.equal(h.w.requestingLock, false);
+    h.doc.pointerLockElement = h.el;
+    h.doc.dispatchEvent(event('pointerlockchange'));
+    assert.equal(
+      h.doc.pointerLockElement,
+      null,
+      'late granted capture also exits',
+    );
+  } finally {
+    h.cleanup();
+  }
+});
+
+void test('articulated motions have distinct visible strokes, keep tool and grip together, and return exactly to rest', () => {
+  const rig = makeFirstPersonRig(),
+    motion = new FirstPersonMotion(rig);
+  const right = rig.getObjectByName('right-hand')!,
+    left = rig.getObjectByName('left-hand')!;
+  const signatures = new Set<string>();
+  for (const action of Object.keys(MOTION_TIMING) as MotionAction[]) {
+    const tool = rig.getObjectByName(
+      `tool-${action === 'reel' ? 'rod' : action}`,
+    )!;
+    motion.pose(action, null);
+    rig.updateMatrixWorld(true);
+    const rest = right.getWorldPosition(new THREE.Vector3());
+    const relativeGrip = right.matrixWorld
+      .clone()
+      .invert()
+      .multiply(tool.matrixWorld);
+    const handScale = right.scale.clone();
+    motion.pose(action, MOTION_TIMING[action].impact);
+    rig.updateMatrixWorld(true);
+    const strike = right.getWorldPosition(new THREE.Vector3());
+    assert.ok(strike.distanceTo(rest) > 0.06, action + ' visibly moves');
+    signatures.add(
+      strike
+        .toArray()
+        .map((n) => n.toFixed(3))
+        .join(','),
+    );
+    if (action !== 'hands') {
+      const atHit = right.matrixWorld
+        .clone()
+        .invert()
+        .multiply(tool.matrixWorld);
+      assert.ok(
+        atHit.elements.every(
+          (n, i) => Math.abs(n - relativeGrip.elements[i]) < 1e-6,
+        ),
+        action + ' stays gripped',
+      );
+    } else {
+      assert.notDeepEqual(
+        right.scale.toArray(),
+        handScale.toArray(),
+        'grasp closes the hand',
+      );
+      assert.ok(
+        left.getWorldPosition(new THREE.Vector3()).z < -0.7,
+        'both hands reach forward',
+      );
+    }
+    for (let i = 0; i <= 20; i++) {
+      motion.pose(action, i / 20);
+      rig.updateMatrixWorld(true);
+      rig.traverseVisible((o) => {
+        if (o instanceof THREE.Mesh) {
+          const bounds = new THREE.Box3().setFromObject(o);
+          assert.ok(
+            bounds.max.z < -0.04,
+            action + ' stays ahead of near plane',
+          );
+          assert.ok(o.matrixWorld.elements.every(Number.isFinite));
+        }
+      });
+    }
+    motion.reset();
+    rig.updateMatrixWorld(true);
+    assert.ok(
+      right.getWorldPosition(new THREE.Vector3()).distanceTo(rest) < 1e-8,
+      action + ' returns exactly to rest',
+    );
+    assert.deepEqual(right.scale.toArray(), handScale.toArray());
+  }
+  assert.equal(signatures.size, 8);
+  const pick = rig.getObjectByName('tool-pickaxe')!;
+  const head = pick.children[1];
+  motion.pose('pickaxe', 0.38);
+  rig.updateMatrixWorld(true);
+  const raised = head.getWorldPosition(new THREE.Vector3());
+  motion.pose('pickaxe', 0.56);
+  rig.updateMatrixWorld(true);
+  const struck = head.getWorldPosition(new THREE.Vector3());
+  assert.ok(
+    raised.y - struck.y > 0.3,
+    'pickaxe goes down from overhead into strike',
+  );
+  assert.ok(struck.z < raised.z, 'strike travels forward');
+});
+void test('harvested models are low remains, hide the entire live node, and restore saved cooldowns without shrinking geometry', () => {
+  let state = initialState();
+  const w: any = Object.create(IslandWorld.prototype);
+  Object.assign(w, {
+    scene: new THREE.Scene(),
+    state: () => state,
+    entities: [],
+    resourceVisuals: new Map(),
+  });
+  const now = Date.now();
+  for (const kind of [
+    'wood',
+    'stone',
+    'fiber',
+    'ore',
+    'clay',
+    'mushroom',
+    'apple',
+  ]) {
+    const live = new THREE.Group();
+    const shape = new THREE.Mesh(new THREE.BoxGeometry(0.6, 4, 0.6));
+    shape.position.y = 2;
+    live.add(shape);
+    live.position.set(w.entities.length * 2, 0, 0);
+    live.scale.set(0.8, 1.1, 0.9);
+    w.scene.add(live);
+    w.entities.push({
+      id: kind,
+      kind,
+      name: kind,
+      object: live,
+      x: live.position.x,
+      z: 0,
+      radius: 0.6,
+    });
+    const remains = makeResourceRemains(kind);
+    const box = new THREE.Box3().setFromObject(remains);
+    assert.ok(
+      box.max.y < 0.45 && box.min.y >= -0.001,
+      kind + ' visibly short and grounded',
+    );
+    state.depleted[kind] = now + 60000;
+  }
+  w.prepareResourceVisuals();
+  w.syncResources(now);
+  for (const e of w.entities) {
+    const { live, remains } = w.resourceVisuals.get(e.id);
+    assert.equal(live.visible, false);
+    assert.equal(remains.visible, true);
+    assert.equal(
+      visibleInTree(live.children[0]),
+      false,
+      'harvested tree cannot block crosshair at eye height',
+    );
+    assert.deepEqual(
+      live.scale.toArray(),
+      [0.8, 1.1, 0.9],
+      'original dimensions remain intact',
+    );
+    assert.equal(regrowthSeconds(state.depleted, e.id, now + 1000), 59);
+  }
+  state = parseSave(JSON.stringify(state))!;
+  assert.ok(state);
+  w.syncResources(now + 59000);
+  assert.equal(
+    w.resourceVisuals.get('wood').live.visible,
+    false,
+    'load respects remaining time',
+  );
+  w.syncResources(now + 60001);
+  for (const { live, remains } of w.resourceVisuals.values()) {
+    assert.equal(live.visible, true);
+    assert.equal(remains.visible, false);
+    assert.deepEqual(live.scale.toArray(), [0.8, 1.1, 0.9]);
+  }
+});
+void test('harvesting occurs exactly at impact; repeated input, misses, tool changes and pause cannot award extra resources', () => {
+  const s = initialState(),
+    rig = makeFirstPersonRig();
+  const target = {
+    id: 'tree-test',
+    kind: 'wood',
+    name: 'Timber',
+    x: 0,
+    z: 0,
+    radius: 0.5,
+    object: new THREE.Group(),
+  };
+  let focused: typeof target | null = target,
+    uses = 0,
+    bursts = 0;
+  const w: any = Object.create(IslandWorld.prototype);
+  Object.assign(w, {
+    state: () => s,
+    paused: false,
+    action: null,
+    handRig: rig,
+    handMotion: new FirstPersonMotion(rig),
+    updateFocus: () => focused,
+    events: {
+      interact: () => {
+        const before = interactionSnapshot(s, target.id);
+        uses++;
+        gather(s, target.id, 'wood');
+        return before !== interactionSnapshot(s, target.id);
+      },
+    },
+    burst: () => bursts++,
+  });
+  const timber = s.inventory.wood;
+  w.interact();
+  w.interact();
+  w.advanceAction(0.1);
+  assert.equal(s.inventory.wood, timber, 'windup does not harvest');
+  w.advanceAction(0.2);
+  assert.equal(s.inventory.wood, timber + 4);
+  assert.equal(uses, 1);
+  assert.equal(bursts, 1);
+  w.interact();
+  w.advanceAction(0.5);
+  assert.equal(uses, 1);
+  assert.equal(w.action, null);
+  w.interact();
+  assert.equal(w.action, null);
+  assert.equal(
+    s.inventory.wood,
+    timber + 4,
+    'depleted node never swings or pays twice',
+  );
+  delete s.depleted[target.id];
+  w.interact();
+  focused = null;
+  w.advanceAction(0.8);
+  assert.equal(
+    s.inventory.wood,
+    timber + 4,
+    'looking away before impact misses',
+  );
+  focused = target;
+  w.interact();
+  s.tool = 'hands';
+  w.advanceAction(0.8);
+  assert.equal(w.action, null);
+  assert.equal(s.inventory.wood, timber + 4);
+  s.tool = 'axe';
+  w.interact();
+  w.paused = true;
+  w.advanceAction(0.8);
+  assert.equal(w.action, null);
+  assert.equal(s.inventory.wood, timber + 4);
+});
+void test('unavailable planting, watering, forage and fishing do not animate a successful action', () => {
+  const s = initialState();
+  const p = s.plots[0];
+  s.tool = 'seeds';
+  s.inventory.seed = 0;
+  assert.equal(canAnimateInteraction(s, 'plot', p.id), false);
+  s.inventory.seed = 10;
+  assert.equal(canAnimateInteraction(s, 'plot', p.id), true);
+  farm(s, p.id);
+  s.tool = 'water';
+  s.water = 0;
+  assert.equal(canAnimateInteraction(s, 'plot', p.id), false);
+  s.water = 10;
+  assert.equal(canAnimateInteraction(s, 'plot', p.id), true);
+  farm(s, p.id);
+  assert.equal(
+    canAnimateInteraction(s, 'plot', p.id),
+    false,
+    'already watered',
+  );
+  s.tool = 'hands';
+  assert.equal(canAnimateInteraction(s, 'mushroom', 'mushroom-1'), false);
+  s.tool = 'rod';
+  assert.equal(canAnimateInteraction(s, 'fish', 'fish-1'), false);
+  s.counters['talk:fisher'] = 1;
+  const now = Date.now();
+  s.fishing = { id: 'fish-1', biteAt: now + 1000, expiresAt: now + 8000 };
+  assert.equal(canAnimateInteraction(s, 'fish', 'fish-1', now), false);
+  assert.equal(canAnimateInteraction(s, 'fish', 'fish-1', now + 1000), true);
+});
+
+void test('building commits on hammer impact, rechecks the chosen footprint, and cancels safely', () => {
+  const s = initialState();
+  s.tool = 'build';
+  const rig = makeFirstPersonRig();
+  let placed = 0;
+  const w: any = Object.create(IslandWorld.prototype);
+  Object.assign(w, {
+    state: () => s,
+    paused: false,
+    action: null,
+    buildType: 'cottage',
+    rotation: 0,
+    ghostPoint: new THREE.Vector3(8, 0, 8),
+    validGhost: true,
+    handMotion: new FirstPersonMotion(rig),
+    updateGhost: () => {},
+    canPlace: () => true,
+    setBuild: (type: string | null) => {
+      w.buildType = type;
+    },
+    burst: () => {},
+    events: { place: () => placed++ },
+  });
+  w.confirmBuild();
+  w.confirmBuild();
+  w.advanceAction(0.1);
+  assert.equal(placed, 0);
+  w.advanceAction(0.2);
+  assert.equal(placed, 1);
+  assert.equal(w.buildType, null);
+  w.advanceAction(0.5);
+  assert.equal(placed, 1);
+  w.buildType = 'cottage';
+  w.confirmBuild();
+  w.ghostPoint.x += 3;
+  w.advanceAction(0.8);
+  assert.equal(
+    placed,
+    1,
+    'moving aim before the strike never builds the old footprint',
+  );
+  w.confirmBuild();
+  w.setBuild(null);
+  w.advanceAction(0.8);
+  assert.equal(placed, 1, 'cancelled plan does not build later');
 });
