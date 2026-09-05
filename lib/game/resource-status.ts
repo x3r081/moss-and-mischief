@@ -21,3 +21,14 @@ export function regrowthSeconds(
 ) {
   return Math.max(0, Math.ceil(((depleted[id] ?? 0) - now) / 1000));
 }
+
+/** Other cooldowns, such as the supply chest, are not harvested resources. */
+export function resourceRegrowthSeconds(
+  depleted: Record<string, number>,
+  entity: { id: string; kind: string } | null,
+  now = Date.now(),
+) {
+  return entity && RESOURCE_KINDS.includes(entity.kind)
+    ? regrowthSeconds(depleted, entity.id, now)
+    : 0;
+}

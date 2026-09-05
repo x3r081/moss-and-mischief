@@ -1,6 +1,9 @@
 'use client';
 import { interactionSnapshot } from '@/lib/game/interactions';
-import { harvestedLabel, regrowthSeconds } from '@/lib/game/resource-status';
+import {
+  harvestedLabel,
+  resourceRegrowthSeconds,
+} from '@/lib/game/resource-status';
 import { useEffect, useRef, useState } from 'react';
 import {
   Sprout,
@@ -507,7 +510,7 @@ export default function Game() {
           </div>
           {!panel && !dialogue && !win && (
             <div
-              className={`crosshair ${near ? (regrowthSeconds(snapshot.depleted, near.id) ? 'depleted' : 'on-target') : ''} ${placing ? (placementInfo.valid ? 'place-valid' : 'place-blocked') : ''}`}
+              className={`crosshair ${near ? (resourceRegrowthSeconds(snapshot.depleted, near) ? 'depleted' : 'on-target') : ''} ${placing ? (placementInfo.valid ? 'place-valid' : 'place-blocked') : ''}`}
               aria-hidden="true"
             >
               <i />
@@ -605,18 +608,18 @@ export default function Game() {
           </div>
           {near && !placing && (
             <button
-              className={`interact-prompt ${regrowthSeconds(snapshot.depleted, near.id) ? 'depleted' : ''}`}
-              disabled={regrowthSeconds(snapshot.depleted, near.id) > 0}
+              className={`interact-prompt ${resourceRegrowthSeconds(snapshot.depleted, near) ? 'depleted' : ''}`}
+              disabled={resourceRegrowthSeconds(snapshot.depleted, near) > 0}
               onClick={() => world.current?.interact()}
             >
               <kbd>E</kbd>
               <span>
-                {regrowthSeconds(snapshot.depleted, near.id)
+                {resourceRegrowthSeconds(snapshot.depleted, near)
                   ? harvestedLabel(near.kind)
                   : near.name}
                 <small>
-                  {regrowthSeconds(snapshot.depleted, near.id) > 0
-                    ? `Harvested · regrows in ${regrowthSeconds(snapshot.depleted, near.id)}s`
+                  {resourceRegrowthSeconds(snapshot.depleted, near) > 0
+                    ? `Harvested · regrows in ${resourceRegrowthSeconds(snapshot.depleted, near)}s`
                     : requiredTool(snapshot, near.kind, near.id)
                       ? snapshot.tool ===
                         requiredTool(snapshot, near.kind, near.id)

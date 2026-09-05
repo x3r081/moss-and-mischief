@@ -20,7 +20,10 @@ import {
   type MotionAction,
 } from '../lib/game/first-person-motion';
 import { makeResourceRemains } from '../lib/game/resource-remains';
-import { regrowthSeconds } from '../lib/game/resource-status';
+import {
+  regrowthSeconds,
+  resourceRegrowthSeconds,
+} from '../lib/game/resource-status';
 import {
   canAnimateInteraction,
   interactionSnapshot,
@@ -886,4 +889,18 @@ void test('building commits on hammer impact, rechecks the chosen footprint, and
   w.setBuild(null);
   w.advanceAction(0.8);
   assert.equal(placed, 1, 'cancelled plan does not build later');
+});
+
+void test('resource HUD never treats supply chest or other timed stations as harvested plants', () => {
+  const now = Date.now(),
+    depleted = { supplies: now + 60000, tree: now + 30000 };
+  assert.equal(
+    resourceRegrowthSeconds(depleted, { id: 'supplies', kind: 'chest' }, now),
+    0,
+  );
+  assert.equal(
+    resourceRegrowthSeconds(depleted, { id: 'tree', kind: 'wood' }, now),
+    30,
+  );
+  assert.equal(resourceRegrowthSeconds(depleted, null, now), 0);
 });
