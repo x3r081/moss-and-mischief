@@ -88,7 +88,8 @@ export default function Game() {
     [error, setError] = useState(''),
     [hasSave, setHasSave] = useState(false),
     [dialogue, setDialogue] = useState(''),
-    [win, setWin] = useState(false);
+    [win, setWin] = useState(false),
+    [saveOk, setSaveOk] = useState(true);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const audio = useRef<IslandAudio | null>(null);
   const notify = (text: string) => {
@@ -103,10 +104,13 @@ export default function Game() {
     setSnapshot(structuredClone(data.current));
   };
   const persist = () => {
-    if (!saveGame(data.current))
+    const saved = saveGame(data.current);
+    setSaveOk(saved);
+    if (!saved)
       notify(
         'Your browser could not save. Allow local storage to keep this adventure.',
       );
+    return saved;
   };
   const act = (entity: Entity) => {
     const s = data.current;
@@ -207,7 +211,7 @@ export default function Game() {
       );
     }
     const saveInterval = setInterval(() => {
-      if (data.current.started) saveGame(data.current);
+      if (data.current.started) setSaveOk(saveGame(data.current));
     }, 10000);
     const unload = () => {
       if (data.current.started) saveGame(data.current);
@@ -508,7 +512,10 @@ export default function Game() {
             <span>Right-drag to orbit · Scroll to zoom</span>
           </div>
           <div className="save-indicator">
-            <span /> Progress saved on this device
+            <span />{' '}
+            {saveOk
+              ? 'Progress saved on this device'
+              : 'Saving unavailable · export in Settings'}
           </div>
           <div className="touch-controls">
             <div className="touch-pad">
@@ -626,8 +633,7 @@ export default function Game() {
           persist();
         }}
         save={() => {
-          persist();
-          notify('Adventure saved. Your carrots are in good hands.');
+          if (persist()) notify('Adventure saved. Your carrots are in good hands.');
         }}
         exportSave={exportSave}
         importSave={importSave}

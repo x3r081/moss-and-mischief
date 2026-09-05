@@ -304,8 +304,8 @@ export function build(
     for (let i = 0; i < 3; i++)
       s.plots.push({
         id: `${id}-plot-${i}`,
-        x: x + (i - 1) * 1.5,
-        z,
+        x: x + (i - 1) * 1.5 * Math.cos(rotation),
+        z: z - (i - 1) * 1.5 * Math.sin(rotation),
         planted: null,
         watered: false,
       });

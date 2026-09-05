@@ -145,6 +145,16 @@ void test('packing a garden refunds materials and seeds, removes its plots', () 
   dismantle(s, id);
   assert.deepEqual(s.inventory, before);
 });
+void test('rotated gardens place crops in the same orientation as their preview', () => {
+  const s = initialState();
+  build(s, 'garden', 4, -2, Math.PI / 2);
+  const plots = s.plots.slice(-3);
+  assert.ok(plots.every((p) => Math.abs(p.x - 4) < 1e-8));
+  assert.deepEqual(
+    plots.map((p) => p.z),
+    [-0.5, -2, -3.5],
+  );
+});
 void test('save validation rejects malformed and dangerous values', () => {
   assert.equal(parseSave('{bad'), null);
   for (const change of [

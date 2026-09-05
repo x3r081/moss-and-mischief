@@ -452,6 +452,19 @@ export class IslandWorld {
     this.placeObject(makeFence(), -13, 3, 0.8).rotation.y = -0.8;
     this.placeObject(makeFence(), 8, 2, 0.8);
     this.placeObject(makeFence(), 11, 5, 0.8).rotation.y = Math.PI / 2;
+    for (const [x, z, angle] of [
+      [-9, 5, 0],
+      [-13, 3, -0.8],
+      [8, 2, 0],
+      [11, 5, Math.PI / 2],
+    ]) {
+      for (const offset of [-1.2, 0, 1.2])
+        this.blockers.push({
+          x: x + Math.cos(angle) * offset,
+          z: z - Math.sin(angle) * offset,
+          r: 0.35,
+        });
+    }
     const chest = this.placeObject(makeChest(), 6, 18);
     chest.rotation.y = -0.4;
     this.entity('supplies', 'chest', 'Washed-up supplies', 6, 18, chest, 0.7);
