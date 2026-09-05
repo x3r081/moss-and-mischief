@@ -47,7 +47,7 @@ button {
   color: inherit;
 }
 button:disabled {
-  cursor: wait;
+  cursor: not-allowed;
   opacity: 0.65;
 }
 button:focus-visible {
@@ -1994,4 +1994,531 @@ kbd {
   color: #b0c59e;
   font-size: 10px;
   padding: 3px;
+}
+/* The Great Bramblewick expansion */
+.expansion-recipes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 16px;
+}
+.expansion-recipe {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px;
+  border: 1px solid #cadca537;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #adc47b13, #0f332d55);
+}
+.expansion-recipe.locked {
+  background: #173c3280;
+}
+.expansion-recipe h3 {
+  font:
+    22px/1.25 Georgia,
+    serif;
+  color: #f0e6bc;
+  margin: 0;
+}
+.expansion-recipe p {
+  font-size: 13px;
+  line-height: 1.65;
+  color: #c3d4b8;
+  margin: 0;
+}
+.expansion-recipe small {
+  color: #afc3a9;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.recipe-title {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+.recipe-title > svg {
+  flex: none;
+  color: #d8dca1;
+}
+.recipe-title div {
+  flex: 1;
+}
+.recipe-title h3 {
+  margin-bottom: 5px;
+}
+.expansion-recipe .recipe-costs {
+  gap: 7px;
+  margin: 0;
+  flex: 1;
+  align-content: start;
+}
+.expansion-recipe .recipe-costs > span {
+  font-size: 12px;
+  flex-wrap: wrap;
+  line-height: 1.5;
+  padding: 4px 7px;
+}
+.expansion-recipe .recipe-costs > span > span {
+  font-size: 11px;
+  display: inline;
+}
+.recipe-action {
+  background: #cfe4a5;
+  color: #294936;
+  border: 1px solid #e8efbd;
+  border-radius: 7px;
+  min-height: 39px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 13px;
+  font-size: 13px;
+  font-weight: 600;
+  margin-top: auto;
+}
+.recipe-action:disabled {
+  background: #ffffff0b;
+  color: #abc19e;
+  border-color: #b5c59d26;
+  opacity: 1;
+}
+.batch-select {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.batch-select small {
+  margin-left: auto;
+  color: #b7c9aa;
+}
+.batch-select button,
+.village-list button,
+.expanded-inventory button {
+  border: 1px solid #cedfb747;
+  background: #e0e6ad10;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+.batch-select .active {
+  background: #d7e5af;
+  color: #25432d;
+}
+.expanded-inventory {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 18px;
+}
+.expanded-inventory article {
+  padding: 16px 9px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #bfdba731;
+  border-radius: 10px;
+  background: #b8d1850a;
+  text-align: center;
+}
+.expanded-inventory article.empty {
+  opacity: 0.48;
+}
+.expanded-inventory b {
+  font: 26px Georgia;
+}
+.expanded-inventory span {
+  font-size: 12px;
+}
+.expanded-inventory button {
+  font-size: 10px;
+}
+.backpack-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #d8e3b3;
+}
+.village-list {
+  display: grid;
+  gap: 8px;
+}
+.village-list article {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px;
+  border: 1px solid #b6c9a12b;
+  border-radius: 9px;
+}
+.village-list small {
+  display: block;
+  color: #a9c1a3;
+  margin-top: 5px;
+}
+.active-quest {
+  padding: 22px;
+  background: #e9e4a00b;
+  border: 1px solid #e1d59145;
+  border-radius: 12px;
+}
+.active-quest h3 {
+  font: 29px Georgia;
+  margin: 12px 0;
+}
+.active-quest p {
+  line-height: 1.7;
+  color: #c4d8b9;
+}
+.active-quest ul {
+  list-style: none;
+  padding: 0;
+  margin: 20px 0;
+  display: grid;
+  gap: 9px;
+}
+.active-quest li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  background: #0c2e2840;
+  padding: 9px 12px;
+  border-radius: 7px;
+}
+.active-quest li span {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.active-quest blockquote {
+  font: italic 16px/1.7 Georgia;
+  color: #dac996;
+  border-left: 2px solid #cabb84;
+  padding-left: 14px;
+}
+.active-quest small {
+  color: #a7c0a6;
+}
+.campaign-list {
+  margin-top: 20px;
+  display: grid;
+  gap: 12px;
+}
+.campaign-list details {
+  border: 1px solid #bdd0a22e;
+  border-radius: 9px;
+  overflow: hidden;
+}
+.campaign-list summary {
+  padding: 17px;
+  cursor: pointer;
+  background: #bdd4950d;
+  font: 18px Georgia;
+}
+.campaign-list summary small {
+  float: right;
+  font: 11px Arial;
+  color: #b6caa7;
+  margin-top: 5px;
+}
+.campaign-list details > div {
+  display: flex;
+  gap: 12px;
+  padding: 12px 18px;
+  border-top: 1px solid #ccd9a719;
+  align-items: center;
+}
+.campaign-list details > div.current {
+  background: #dfdaa311;
+}
+.campaign-list p {
+  font-size: 12px;
+  color: #b7cba7;
+  line-height: 1.6;
+  margin: 5px 0;
+}
+.campaign-list b {
+  font-size: 14px;
+}
+.quest-number {
+  font-size: 11px;
+  display: block;
+  min-width: 17px;
+  text-align: center;
+  color: #bfcfa4;
+}
+.expansion-map {
+  max-width: 640px;
+  margin: auto;
+}
+.expansion-map svg {
+  width: 100%;
+  display: block;
+}
+.expansion-map text {
+  font: 9px Georgia;
+  fill: #183d31;
+  paint-order: stroke;
+  stroke: #c0d2a4;
+  stroke-width: 2px;
+  stroke-linejoin: round;
+}
+.expansion-map .map-relic {
+  fill: #ffe6a4;
+  font-size: 16px;
+  stroke: #765632;
+  stroke-width: 1px;
+}
+.expansion-map p {
+  font-size: 12px;
+  text-align: center;
+  color: #b6caaa;
+}
+.resident-list {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.resident-list > div {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
+  background: #bdd4a80b;
+  border-radius: 7px;
+}
+.resident-list span {
+  flex: 1;
+}
+.resident-list b {
+  font-size: 13px;
+}
+.resident-list small {
+  display: block;
+  font-size: 11px;
+  color: #adc3a5;
+  line-height: 1.6;
+}
+.project-status {
+  font-size: 12px !important;
+  color: #d9d298 !important;
+}
+.expansion-help h3 {
+  font: 23px Georgia;
+  color: #ecdfb7;
+  margin: 23px 0 10px;
+}
+.expansion-help p {
+  line-height: 1.85;
+  font-size: 14px;
+  color: #c5d5b9;
+}
+.expansion-help b {
+  color: #ecedcb;
+}
+.crop-selector,
+.tool-status {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 137px;
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  background: #173d34ed;
+  border: 1px solid #c4d6a849;
+  border-radius: 10px;
+  padding: 7px;
+  color: #e7ebc6;
+  box-shadow: 0 5px 22px #102f2850;
+  max-width: 95vw;
+}
+.crop-selector button {
+  padding: 8px 13px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  font-size: 13px;
+}
+.crop-selector .active {
+  background: #dbe7b6;
+  color: #284632;
+}
+.crop-selector small {
+  display: block;
+  font-size: 9px;
+  margin-top: 4px;
+}
+.tool-status {
+  font-size: 12px;
+  padding: 11px 16px;
+  white-space: nowrap;
+}
+.tool-status.bite {
+  background: #f2d27c;
+  color: #234732;
+  font-weight: bold;
+}
+.interact-prompt {
+  bottom: 193px;
+}
+.interact-prompt small {
+  display: block;
+  font-size: 11px;
+  margin-top: 5px;
+  color: #c2d49f;
+}
+.build-hint {
+  bottom: 140px;
+  flex-wrap: wrap;
+  max-width: min(700px, 96vw);
+  width: max-content;
+  justify-content: center;
+  gap: 10px;
+  padding: 13px 17px;
+}
+.build-hint > span:nth-child(3) {
+  flex-basis: 100%;
+  text-align: center;
+  font-size: 13px;
+}
+.build-hint.valid {
+  border-color: #90d595;
+}
+.build-hint.invalid {
+  border-color: #d6a080;
+}
+.build-hint button {
+  border: 1px solid #d3dfb646;
+  border-radius: 6px;
+  padding: 7px 10px;
+  font-size: 12px;
+  background: #ffffff0a;
+}
+.build-hint button:disabled {
+  opacity: 0.35;
+}
+.tool-slots button > span {
+  font-size: 10px;
+}
+.quest-overline > span {
+  font-size: 9px;
+  line-height: 1.5;
+}
+.quest-card {
+  width: 294px;
+}
+.game-dialog [data-slot='tabs-list'] {
+  flex-wrap: wrap;
+  height: auto;
+  gap: 4px;
+}
+.game-dialog [data-slot='tabs-trigger'] {
+  font-size: 13px;
+  min-height: 34px;
+}
+@media (max-width: 800px) {
+  .expansion-recipes {
+    grid-template-columns: 1fr 1fr;
+  }
+  .expansion-recipe {
+    padding: 15px;
+  }
+  .game-dialog[data-slot='dialog-content'] {
+    padding: 25px 18px;
+  }
+  .hotbar .tool-slots button {
+    width: 44px;
+    height: 57px;
+  }
+  .hotbar .tool-slots button > svg {
+    width: 21px;
+  }
+  .hotbar .tool-slots button > span {
+    font-size: 9px;
+  }
+  .hotbar {
+    bottom: 35px;
+    gap: 2px;
+  }
+  .hotbar .tool-slots {
+    gap: 1px;
+  }
+  .bag-button {
+    width: 30px;
+  }
+  .crop-selector,
+  .tool-status {
+    bottom: 113px;
+  }
+  .interact-prompt {
+    bottom: 165px;
+  }
+  .build-hint {
+    bottom: 116px;
+  }
+  .quest-card {
+    width: 235px;
+  }
+  .tool-status {
+    white-space: normal;
+    text-align: center;
+    width: max-content;
+  }
+  .controls-footer {
+    display: none;
+  }
+}
+@media (max-width: 560px) {
+  .expansion-recipes {
+    grid-template-columns: 1fr;
+  }
+  .expanded-inventory {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .resident-list {
+    grid-template-columns: 1fr;
+  }
+  .hotbar .tool-slots button {
+    width: 36px;
+  }
+  .hotbar .tool-slots button > span {
+    font-size: 8px;
+  }
+  .crop-selector button {
+    padding: 7px 10px;
+    font-size: 11px;
+  }
+  .crop-selector small {
+    font-size: 8px;
+  }
+  .interact-prompt {
+    max-width: 92vw;
+  }
+  .campaign-list summary {
+    font-size: 16px;
+  }
+  .campaign-list summary small {
+    float: none;
+    display: block;
+    margin-left: 18px;
+  }
+  .batch-select small {
+    width: 100%;
+    margin: 5px 0;
+  }
+  .quest-card {
+    width: 218px;
+  }
+  .active-quest {
+    padding: 17px;
+  }
+  .active-quest h3 {
+    font-size: 24px;
+  }
+  .active-quest li {
+    font-size: 12px;
+  }
 }

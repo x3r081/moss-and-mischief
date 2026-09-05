@@ -7,7 +7,6 @@ import {
   makeWorkbench,
   makeCampfire,
   makeFence,
-  makeCrop,
   makePlayer,
   makeGoose,
   makeChest,
@@ -21,6 +20,23 @@ import {
   type GameState,
   type Structure,
 } from './state';
+import {
+  makeStructure,
+  makeVillager,
+  makeResource,
+  makeCropVariant,
+  disposeExtraModelLibrary,
+} from './extra-models';
+import {
+  NPCS,
+  REGIONS,
+  RELIC_LOCATIONS,
+  PROJECT_LOCATIONS,
+  CROPS,
+  type Crop,
+  type Tool,
+} from './catalog';
+import { placement, footprint, circleHits } from './placement';
 import { heightAt, onLand, shoreRadius } from './terrain';
 export { heightAt, onLand, shoreRadius, LAND_RADIUS } from './terrain';
 
@@ -37,7 +53,19 @@ export type Entity = {
     | 'chest'
     | 'workbench'
     | 'campfire'
-    | 'cottage';
+    | 'cottage'
+    | 'npc'
+    | 'ore'
+    | 'clay'
+    | 'mushroom'
+    | 'apple'
+    | 'fish'
+    | 'relic'
+    | 'project'
+    | 'spring'
+    | 'station'
+    | 'production'
+    | 'market';
   name: string;
   x: number;
   z: number;
@@ -46,6 +74,7 @@ export type Entity = {
 };
 export type WorldEvents = {
   near: (e: Entity | null) => void;
+  placement: (valid: boolean, message: string) => void;
   interact: (e: Entity) => void;
   place: (type: Structure, x: number, z: number, rotation: number) => void;
   menu: (name: string) => void;
@@ -107,7 +136,7 @@ export class IslandWorld {
   private beacon!: THREE.Mesh;
   private plantGroups = new Map<
     string,
-    { group: THREE.Group; stage: number; watered: boolean }
+    { group: THREE.Group; stage: number; watered: boolean; crop: Crop }
   >();
   private placed = new Map<string, THREE.Group>();
   private blockers: { id?: string; x: number; z: number; r: number }[] = [];
@@ -125,6 +154,11 @@ export class IslandWorld {
     vy: number;
     vz: number;
   }[] = [];
+  private grid: THREE.InstancedMesh | null = null;
+  private gridCenter = new THREE.Vector2(999, 999);
+  private lastPlacementMessage = '';
+  private equipped: Tool | null = null;
+  private handheld: THREE.Group | null = null;
   private last = 0;
   private frame = 0;
   private clock = 0;
@@ -184,10 +218,11 @@ export class IslandWorld {
     });
     this.sun.shadow.normalBias = 0.06;
     this.sun.shadow.bias = -0.0001;
-    this.scene.add(this.sun, this.ambient);
+    this.scene.add(this.sun, this.sun.target, this.ambient);
     this.createTerrain();
     this.createVillage();
     this.createNature();
+    this.createExpansion();
     this.createAtmosphere();
     const p = this.state().player;
     this.player.position.set(p.x, heightAt(p.x, p.z), p.z);
@@ -272,7 +307,7 @@ export class IslandWorld {
   }
   private createTerrain() {
     const segments = 144,
-      rings = 36,
+      rings = 72,
       vertices: number[] = [],
       colors: number[] = [],
       indices: number[] = [];
@@ -350,7 +385,7 @@ export class IslandWorld {
       new THREE.ShaderMaterial({
         uniforms: { time: { value: 0 } },
         vertexShader: `varying vec3 p;void main(){vec4 w=modelMatrix*vec4(position,1.);p=w.xyz;gl_Position=projectionMatrix*viewMatrix*w;}`,
-        fragmentShader: `varying vec3 p;uniform float time;void main(){float d=length(p.xz);float a=atan(p.z,p.x);float coast=25.+sin(a*3.+.4)*1.7+cos(a*5.)*.9;float near=1.-smoothstep(coast,coast+15.,d);vec3 col=mix(vec3(.08,.37,.42),vec3(.25,.70,.66),near);float w=sin(p.x*.7+p.z*.65+time*.65)*sin(p.z*1.3-p.x*.4-time*.4);col+=max(0.,pow(abs(w),18.))*.1;float foam=(1.-smoothstep(.15,.75,abs(d-coast-.6-sin(a*19.+time)*.12)))*.55;col=mix(col,vec3(.79,.92,.81),foam);gl_FragColor=vec4(col,1.);#include <tonemapping_fragment>\n#include <colorspace_fragment>}`,
+        fragmentShader: `varying vec3 p;uniform float time;void main(){float d=length(p.xz);float a=atan(p.z,p.x);float coast=53.+sin(a*3.+.4)*3.5+cos(a*5.)*1.8;float near=1.-smoothstep(coast,coast+15.,d);vec3 col=mix(vec3(.08,.37,.42),vec3(.25,.70,.66),near);float w=sin(p.x*.7+p.z*.65+time*.65)*sin(p.z*1.3-p.x*.4-time*.4);col+=max(0.,pow(abs(w),18.))*.1;float foam=(1.-smoothstep(.15,.75,abs(d-coast-.6-sin(a*19.+time)*.12)))*.55;col=mix(col,vec3(.79,.92,.81),foam);gl_FragColor=vec4(col,1.);#include <tonemapping_fragment>\n#include <colorspace_fragment>}`,
       }),
     );
     // Shader includes must begin on their own source line.
@@ -474,11 +509,11 @@ export class IslandWorld {
         new THREE.BoxGeometry(3, 0.15, 0.47),
         dockMat,
         7,
-        -0.18,
-        22 + i * 0.5,
+        0.35,
+        50 + i * 0.5,
       );
     for (const x of [5.7, 8.3])
-      for (const z of [23, 26, 28])
+      for (const z of [50, 53, 55])
         this.addMesh(
           new THREE.CylinderGeometry(0.13, 0.18, 2, 7),
           dockMat,
@@ -738,12 +773,12 @@ export class IslandWorld {
       side: THREE.DoubleSide,
       roughness: 1,
     });
-    const grass = new THREE.InstancedMesh(grassGeo, grassMat, 5000);
+    const grass = new THREE.InstancedMesh(grassGeo, grassMat, 15000);
     const dummy = new THREE.Object3D();
     let n = 0;
-    for (let i = 0; i < 8000 && n < 5000; i++) {
-      const x = (rand() - 0.5) * 52,
-        z = (rand() - 0.5) * 52;
+    for (let i = 0; i < 24000 && n < 15000; i++) {
+      const x = (rand() - 0.5) * 110,
+        z = (rand() - 0.5) * 110;
       if (
         !onLand(x, z, 1.8) ||
         (!clear(x, z) && rand() < 0.94) ||
@@ -833,12 +868,358 @@ export class IslandWorld {
     // Offshore rocky islets lend depth beyond the playable island.
     for (let i = 0; i < 12; i++) {
       const a = (i / 12) * Math.PI * 2,
-        r = 34 + rand() * 14;
+        r = 64 + rand() * 20;
       const rock = makeRock(i + 500);
       rock.position.set(Math.cos(a) * r, -1.2, Math.sin(a) * r);
       rock.scale.set(3 + rand() * 2, 2 + rand() * 2, 3 + rand() * 2);
       this.scene.add(rock);
     }
+  }
+  private label(text: string, x: number, z: number, color = '#f6e8bd') {
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 96;
+    const ctx = canvas.getContext('2d')!;
+    ctx.fillStyle = '#173c32';
+    ctx.beginPath();
+    ctx.roundRect(8, 8, 496, 72, 18);
+    ctx.fill();
+    ctx.font = '600 28px Georgia';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = color;
+    ctx.fillText(text, 256, 54);
+    const texture = new THREE.CanvasTexture(canvas);
+    const sprite = new THREE.Sprite(
+      new THREE.SpriteMaterial({
+        map: texture,
+        transparent: true,
+        depthTest: true,
+      }),
+    );
+    sprite.position.set(x, heightAt(x, z) + 3.7, z);
+    sprite.scale.set(5.8, 1.1, 1);
+    this.scene.add(sprite);
+  }
+  private createExpansion() {
+    const rand = random(270),
+      stone = mat(0x777d75),
+      wood = mat(0x84613d),
+      trail = mat(0xbfa875);
+    for (const [key, r] of Object.entries(REGIONS)) {
+      if (key === 'homestead') continue;
+      this.label(r.name, r.x, r.z - 3);
+      // Narrow stepping-stone trails connect broad clearings for new homesteads.
+      const length = Math.hypot(r.x, r.z - 7);
+      for (let i = 0; i < length; i += 2) {
+        const f = i / length,
+          x = r.x * f,
+          z = 7 + (r.z - 7) * f;
+        if (Math.hypot(x, z) < 20) continue;
+        const tile = this.addMesh(
+          new THREE.CylinderGeometry(0.62, 0.72, 0.055, 7),
+          trail,
+          x,
+          heightAt(x, z) + 0.025,
+          z,
+        );
+        tile.rotation.y = rand() * 6;
+      }
+    }
+    for (const [key, n] of Object.entries(NPCS)) {
+      if (n.role === 'mayor') continue;
+      const person = this.placeObject(makeVillager(n.role), n.x, n.z, 1.15);
+      person.rotation.y = 0.4;
+      this.entity(key, 'npc', `Talk to ${n.name}`, n.x, n.z, person, 0.6);
+      this.label(n.name, n.x, n.z);
+      const shelter = this.placeObject(
+        makeStructure(
+          key === 'ranger'
+            ? 'shed'
+            : key === 'fisher'
+              ? 'market'
+              : key === 'smith'
+                ? 'forge'
+                : key === 'botanist'
+                  ? 'greenhouse'
+                  : key === 'astronomer'
+                    ? 'observatory'
+                    : 'tavern',
+        ),
+        n.x + 4,
+        n.z - 5,
+        0.72,
+      );
+      shelter.rotation.y = -0.3;
+      this.blockers.push({ x: n.x + 4, z: n.z - 5, r: 2.1 });
+    }
+    for (let i = 0; i < 145; i++) {
+      const a = rand() * Math.PI * 2,
+        r = 27 + rand() * 22,
+        x = Math.cos(a) * r,
+        z = Math.sin(a) * r;
+      if (
+        !onLand(x, z, 3) ||
+        Math.abs(z + 29) < 2 ||
+        Math.abs(z + 41) < 2 ||
+        (Math.abs(x) < 5 && z < -23) ||
+        Object.values(NPCS).some((n) => Math.hypot(x - n.x, z - n.z) < 10) ||
+        RELIC_LOCATIONS.some((n) => Math.hypot(x - n.x, z - n.z) < 3) ||
+        Object.values(PROJECT_LOCATIONS).some(
+          (n) => Math.hypot(x - n.x, z - n.z) < 5,
+        )
+      )
+        continue;
+      const t = this.placeObject(
+        makeTree(z < 0 ? 'pine' : 'oak', i + 300),
+        x,
+        z,
+        0.8 + rand() * 0.25,
+      );
+      this.entity(`outer-tree-${i}`, 'wood', 'Gather timber', x, z, t, 0.6);
+      this.blockers.push({ x, z, r: 0.55 });
+    }
+    const resource = (
+      kind: 'ore' | 'clay' | 'mushroom' | 'apple',
+      x: number,
+      z: number,
+      i: number,
+    ) => {
+      const obj = this.placeObject(makeResource(kind), x, z);
+      this.entity(`${kind}-${i}`, kind, `Gather ${kind}`, x, z, obj, 0.7);
+    };
+    for (let i = 0; i < 9; i++) {
+      const a = i * 2.4;
+      resource('ore', 29 + Math.cos(a) * 7, -20 + Math.sin(a) * 7, i);
+      resource('clay', 24 + Math.cos(a) * 6, -12 + Math.sin(a) * 4, i);
+      resource('mushroom', -29 + Math.cos(a) * 7, -8 + Math.sin(a) * 7, i);
+    }
+    for (let i = 0; i < 8; i++) {
+      const x = -36 + (i % 4) * 4,
+        z = 18 + Math.floor(i / 4) * 9;
+      const tree = this.placeObject(makeTree('oak', i + 900), x, z, 1.05);
+      tree.traverse((o) => {
+        if (o instanceof THREE.Mesh && o.position.y > 1) {
+          o.userData.orchard = true;
+        }
+      });
+      this.blockers.push({ x, z, r: 0.55 });
+      resource('apple', x + 1.2, z + 1.2, i);
+    }
+    // A shallow turquoise pond, reeds, and four marked fishing places.
+    const pond = this.addMesh(
+      new THREE.CylinderGeometry(5.8, 6.2, 0.1, 48),
+      new THREE.MeshStandardMaterial({
+        color: 0x4fa5a9,
+        roughness: 0.18,
+        metalness: 0.3,
+      }),
+      34,
+      heightAt(34, 25) + 0.02,
+      25,
+    );
+    pond.scale.z = 0.66;
+    this.blockers.push({ x: 34, z: 25, r: 4.2 });
+    for (let i = 0; i < 22; i++) {
+      const a = (i / 22) * Math.PI * 2,
+        x = 34 + Math.cos(a) * 6,
+        z = 25 + Math.sin(a) * 4;
+      this.addMesh(
+        new THREE.ConeGeometry(0.13, 0.85, 5),
+        mat(0x79965d),
+        x,
+        heightAt(x, z) + 0.4,
+        z,
+      );
+    }
+    for (const [i, pt] of [
+      [29, 25],
+      [34, 30],
+      [39, 25],
+      [34, 20],
+    ].entries()) {
+      const [x, z] = pt;
+      const g = this.placeObject(makeResource('fish'), x, z);
+      this.entity(`fish-${i}`, 'fish', 'Cast or reel your line', x, z, g, 0.7);
+    }
+    for (const r of RELIC_LOCATIONS) {
+      const g = this.placeObject(makeResource('relic'), r.x, r.z);
+      this.entity(r.id, 'relic', r.name, r.x, r.z, g, 0.8);
+    }
+    // The public spring stays available before a well can be built.
+    const spring = this.placeObject(makeStructure('well'), 1, 11, 0.8);
+    this.entity('spring', 'spring', 'Refill watering can', 1, 11, spring, 0.9);
+    this.blockers.push({ x: 1, z: 11, r: 0.75 });
+    this.label('Village spring', 1, 11);
+    for (const [key, p] of Object.entries(PROJECT_LOCATIONS)) {
+      if (key === 'lighthouse') continue;
+      const g = new THREE.Group();
+      if (key === 'bridge') {
+        g.add(makeStructure('bridge'));
+        g.rotation.y = Math.PI / 2;
+      } else if (key === 'gate') {
+        for (const x of [-2, 2])
+          this.addMesh(new THREE.BoxGeometry(0.75, 4, 0.85), stone, x, 2, 0, g);
+        this.addMesh(new THREE.BoxGeometry(4.8, 0.7, 0.9), stone, 0, 4.2, 0, g);
+      } else {
+        this.addMesh(
+          new THREE.CylinderGeometry(1, 1.2, 0.25, 8),
+          stone,
+          0,
+          0.13,
+          0,
+          g,
+        );
+        this.addMesh(
+          new THREE.CylinderGeometry(0.15, 0.15, 1.7, 8),
+          wood,
+          0,
+          1,
+          0,
+          g,
+        );
+      }
+      const gem = this.addMesh(
+        new THREE.OctahedronGeometry(0.45),
+        new THREE.MeshStandardMaterial({
+          color: 0xf3ce78,
+          emissive: 0x815220,
+          emissiveIntensity: 0.75,
+        }),
+        0,
+        2.6,
+        0,
+        g,
+      );
+      gem.name = 'project-light';
+      this.placeObject(g, p.x, p.z);
+      this.entity(
+        key,
+        'project',
+        p.name,
+        p.x,
+        p.z,
+        g,
+        key === 'gate' ? 2 : 1.5,
+      );
+      this.label(p.name, p.x, p.z);
+    }
+    // Cliffs describe the progression boundaries; the central project opens the crossing.
+    for (const z of [-30, -42])
+      for (let x = -49; x <= 49; x += 4) {
+        if (Math.abs(x - (z === -30 ? 0 : -5)) < 4 || !onLand(x, z, 2))
+          continue;
+        const cliff = this.placeObject(makeRock(x + z + 3000), x, z);
+        cliff.scale.set(2.7, 1.5 + rand(), 1.4);
+      }
+  }
+  private walkable(x: number, z: number) {
+    const s = this.state();
+    return (
+      onLand(x, z, 0.8) &&
+      (z >= -29 || s.projects.bridge) &&
+      (z >= -41 || s.projects.gate) &&
+      !this.blockers.some((b) => Math.hypot(x - b.x, z - b.z) < b.r + 0.25) &&
+      !s.buildings
+        .filter((b) => b.type !== 'garden')
+        .some((b) =>
+          circleHits(footprint(b.type, b.x, b.z, b.rotation), {
+            x,
+            z,
+            r: 0.28,
+          }),
+        )
+    );
+  }
+  private equipTool() {
+    const tool = this.state().tool;
+    if (tool === this.equipped) return;
+    this.equipped = tool;
+    if (this.handheld) {
+      this.handheld.removeFromParent();
+      this.handheld.traverse((o) => {
+        if (o instanceof THREE.Mesh) {
+          o.geometry.dispose();
+          (o.material as THREE.Material).dispose();
+        }
+      });
+    }
+    const arm = this.player.getObjectByName('rightArm');
+    if (!arm || tool === 'hands') {
+      this.handheld = null;
+      return;
+    }
+    const g = new THREE.Group(),
+      handle = mat(0x90623d),
+      metal = mat(0xb4c4bb);
+    g.position.set(0.08, -0.34, 0.24);
+    if (['axe', 'pickaxe', 'build'].includes(tool)) {
+      this.addMesh(
+        new THREE.CylinderGeometry(0.035, 0.045, 0.8, 6),
+        handle,
+        0,
+        -0.13,
+        0.12,
+        g,
+      );
+      this.addMesh(
+        new THREE.BoxGeometry(tool === 'pickaxe' ? 0.65 : 0.32, 0.18, 0.1),
+        metal,
+        0.08,
+        0.24,
+        0.12,
+        g,
+      );
+    }
+    if (tool === 'water') {
+      this.addMesh(
+        new THREE.CylinderGeometry(0.18, 0.16, 0.27, 10),
+        mat(0x478d83),
+        0,
+        0,
+        0.1,
+        g,
+      );
+      const spout = this.addMesh(
+        new THREE.CylinderGeometry(0.055, 0.03, 0.35, 6),
+        metal,
+        0.19,
+        0.08,
+        0.1,
+        g,
+      );
+      spout.rotation.z = -0.85;
+    }
+    if (tool === 'seeds')
+      this.addMesh(
+        new THREE.SphereGeometry(0.16, 8, 6),
+        mat(0xd7b57a),
+        0,
+        0,
+        0.1,
+        g,
+      );
+    if (tool === 'rod') {
+      const rod = this.addMesh(
+        new THREE.CylinderGeometry(0.025, 0.035, 1.8, 6),
+        handle,
+        0,
+        0.5,
+        0.1,
+        g,
+      );
+      rod.rotation.x = -0.25;
+      const line = this.addMesh(
+        new THREE.CylinderGeometry(0.007, 0.007, 1.2, 4),
+        metal,
+        0,
+        0.65,
+        0.5,
+        g,
+      );
+      line.rotation.x = 0.1;
+    }
+    this.handheld = g;
+    arm.add(g);
   }
   private createAtmosphere() {
     const rand = random(90),
@@ -918,7 +1299,8 @@ export class IslandWorld {
         if (e.code === 'KeyC') this.events.menu('craft');
         if (e.code === 'KeyJ') this.events.menu('journal');
         if (e.code === 'KeyI') this.events.menu('inventory');
-        if (e.code === 'KeyR' && this.buildType) this.rotation += Math.PI / 2;
+        if (e.code === 'KeyR' && this.buildType) this.rotateBuild();
+        if (e.code === 'Enter' && this.buildType) this.confirmBuild();
         if (e.code === 'Space' && this.jump <= 0) this.jumpSpeed = 5;
         if (e.code.startsWith('Digit')) this.events.menu(e.code);
       },
@@ -970,18 +1352,17 @@ export class IslandWorld {
           Math.hypot(e.clientX - this.downX, e.clientY - this.downY) > 10
         )
           return;
+        const bounds = el.getBoundingClientRect();
+        if (
+          e.clientX < bounds.left ||
+          e.clientX > bounds.right ||
+          e.clientY < bounds.top ||
+          e.clientY > bounds.bottom
+        )
+          return;
         this.screenPoint(e.clientX, e.clientY);
         if (this.buildType) {
-          this.updateGhost();
-          if (this.validGhost) {
-            this.events.place(
-              this.buildType,
-              this.ghostPoint.x,
-              this.ghostPoint.z,
-              this.rotation,
-            );
-            this.setBuild(null);
-          }
+          this.confirmBuild();
           return;
         }
         const hit = this.ray.intersectObjects(
@@ -1089,30 +1470,69 @@ export class IslandWorld {
   setBuild(type: Structure | null) {
     this.buildType = type;
     this.rotation = 0;
+    this.validGhost = false;
+    this.lastPlacementMessage = '';
+    this.gridCenter.set(999, 999);
     if (this.ghost) {
       this.scene.remove(this.ghost);
       this.ghost.traverse((o) => {
-        if (o instanceof THREE.Mesh) (o.material as THREE.Material).dispose();
+        if (o instanceof THREE.Mesh) {
+          if (o.userData.previewFootprint) o.geometry.dispose();
+          for (const m of Array.isArray(o.material) ? o.material : [o.material])
+            m.dispose();
+        }
       });
       this.ghost = null;
     }
-    if (type) {
-      this.ghost = this.buildModel(type);
-      this.ghost.traverse((o) => {
-        if (o instanceof THREE.Mesh) {
-          const m = (o.material as THREE.MeshStandardMaterial).clone();
-          m.transparent = true;
-          m.opacity = 0.48;
-          m.depthWrite = false;
-          o.material = m;
-          o.castShadow = false;
-        }
-      });
-      this.scene.add(this.ghost);
-      this.ghost.visible = false;
+    if (this.grid) this.grid.visible = !!type;
+    if (!type) {
+      this.events.placement(false, '');
+      return;
     }
+    this.ghost = this.buildModel(type);
+    const [w, d] = RECIPES[type].size!;
+    const plate = new THREE.Mesh(
+      new THREE.BoxGeometry(w, 0.045, d),
+      new THREE.MeshStandardMaterial({ color: 0x6eef9b }),
+    );
+    plate.position.y = 0.04;
+    plate.userData.previewFootprint = true;
+    this.ghost.add(plate);
+    this.ghost.traverse((o) => {
+      if (o instanceof THREE.Mesh) {
+        const m = (o.material as THREE.MeshStandardMaterial).clone();
+        if (o === plate) (o.material as THREE.Material).dispose();
+        m.transparent = true;
+        m.opacity = 0.5;
+        m.depthWrite = false;
+        o.material = m;
+        o.castShadow = false;
+      }
+    });
+    this.scene.add(this.ghost);
+    this.ghost.visible = false;
+    if (!this.grid) {
+      this.grid = new THREE.InstancedMesh(
+        new THREE.PlaneGeometry(0.91, 0.91),
+        new THREE.MeshBasicMaterial({
+          transparent: true,
+          opacity: 0.22,
+          side: THREE.DoubleSide,
+          depthWrite: false,
+        }),
+        625,
+      );
+      this.grid.frustumCulled = false;
+      this.scene.add(this.grid);
+    }
+    this.updateGrid();
+    this.events.placement(
+      false,
+      'Point at the grid. Green cells have room for this building.',
+    );
   }
   private buildModel(type: Structure) {
+    if (type === 'garden') return new THREE.Group();
     return type === 'cottage'
       ? makeHouse()
       : type === 'workbench'
@@ -1121,48 +1541,98 @@ export class IslandWorld {
           ? makeCampfire()
           : type === 'fence'
             ? makeFence()
-            : new THREE.Group();
+            : makeStructure(type);
   }
-  canPlace(type: Structure, x: number, z: number) {
-    const radius =
-      type === 'cottage'
-        ? 3.4
-        : type === 'fence'
-          ? 2.1
-          : type === 'garden'
-            ? 2.2
-            : 1.25;
-    if (
-      !onLand(x, z, radius + 1) ||
-      this.state().buildings.length >= 120 ||
-      Math.hypot(x - this.player.position.x, z - this.player.position.z) <
-        radius + 0.5 ||
-      Math.hypot(x - this.player.position.x, z - this.player.position.z) > 12
-    )
-      return false;
-    if (this.blockers.some((b) => Math.hypot(x - b.x, z - b.z) < radius + b.r))
-      return false;
-    if (
-      this.state().plots.some(
-        (p) => Math.hypot(x - p.x, z - p.z) < radius + 0.6,
-      )
-    )
-      return false;
-    if (
-      this.entities.some(
-        (e) =>
-          ['goose', 'crystal', 'chest'].includes(e.kind) &&
-          Math.hypot(x - e.x, z - e.z) < radius + 1,
-      )
-    )
-      return false;
-    return true;
+  private placementResult(
+    type: Structure,
+    x: number,
+    z: number,
+    rotation = this.rotation,
+  ) {
+    return placement(this.state(), type, x, z, rotation, [
+      ...this.blockers,
+      ...this.entities
+        .filter(
+          (e) =>
+            [
+              'goose',
+              'npc',
+              'crystal',
+              'chest',
+              'project',
+              'spring',
+              'lighthouse',
+              'relic',
+              'fish',
+              'ore',
+              'clay',
+              'mushroom',
+              'apple',
+              'fiber',
+            ].includes(e.kind) && e.object.visible,
+        )
+        .map((e) => ({ x: e.x, z: e.z, r: e.radius + 0.35 })),
+    ]);
+  }
+  canPlace(type: Structure, x: number, z: number, rotation = this.rotation) {
+    return this.placementResult(type, x, z, rotation).ok;
+  }
+  rotateBuild() {
+    this.rotation = (this.rotation + Math.PI / 2) % (Math.PI * 2);
+    this.gridCenter.set(999, 999);
+    this.updateGhost();
+    this.updateGrid();
+  }
+  confirmBuild() {
+    if (this.paused || !this.buildType) return;
+    this.updateGhost();
+    if (this.validGhost) {
+      const type = this.buildType;
+      this.events.place(
+        type,
+        this.ghostPoint.x,
+        this.ghostPoint.z,
+        this.rotation,
+      );
+      this.setBuild(null);
+    }
+  }
+  private updateGrid() {
+    if (!this.grid || !this.buildType) return;
+    const p = this.state().player;
+    if (Math.hypot(p.x - this.gridCenter.x, p.z - this.gridCenter.y) < 0.7)
+      return;
+    this.gridCenter.set(p.x, p.z);
+    const obj = new THREE.Object3D();
+    let n = 0;
+    for (let i = -12; i <= 12; i++)
+      for (let j = -12; j <= 12; j++) {
+        const x = Math.round(p.x) + i,
+          z = Math.round(p.z) + j;
+        obj.position.set(x, heightAt(x, z) + 0.08, z);
+        obj.rotation.x = -Math.PI / 2;
+        obj.scale.setScalar(Math.hypot(i, j) <= 14 && onLand(x, z, 1) ? 1 : 0);
+        obj.updateMatrix();
+        this.grid.setMatrixAt(n, obj.matrix);
+        this.grid.setColorAt(
+          n,
+          new THREE.Color(
+            this.canPlace(this.buildType, x, z) ? 0x8ef1a1 : 0xe38562,
+          ),
+        );
+        n++;
+      }
+    this.grid.instanceMatrix.needsUpdate = true;
+    if (this.grid.instanceColor) this.grid.instanceColor.needsUpdate = true;
   }
   private updateGhost() {
+    this.validGhost = false;
     if (!this.ghost || !this.buildType) return;
+    this.ray.setFromCamera(this.mouse, this.camera);
     const hit = this.ray.intersectObject(this.ground)[0];
     if (!hit) {
       this.ghost.visible = false;
+      this.events.placement(false, 'Point at solid ground inside the grid.');
       return;
     }
     const x = Math.round(hit.point.x * 2) / 2,
@@ -1171,25 +1641,21 @@ export class IslandWorld {
     this.ghost.position.copy(this.ghostPoint);
     this.ghost.rotation.y = this.rotation;
     this.ghost.visible = true;
-    this.validGhost =
-      this.canPlace(this.buildType, x, z) &&
-      canAfford(this.state(), RECIPES[this.buildType].cost);
-    if (this.buildType === 'garden' && this.ghost.children.length === 0) {
-      const bed = this.addMesh(
-        new THREE.BoxGeometry(4, 0.12, 1.25),
-        mat(0x6ea781),
-        0,
-        0.08,
-        0,
-        this.ghost,
-      );
-      (bed.material as THREE.Material).transparent = true;
-      (bed.material as THREE.Material).opacity = 0.5;
+    const check = this.placementResult(this.buildType, x, z);
+    const affordable = canAfford(this.state(), RECIPES[this.buildType].cost);
+    this.validGhost = check.ok && affordable;
+    const reason =
+      check.ok && !affordable
+        ? 'Gather the missing materials before placing.'
+        : check.reason;
+    if (reason !== this.lastPlacementMessage) {
+      this.lastPlacementMessage = reason;
+      this.events.placement(this.validGhost, reason);
     }
     this.ghost.traverse((o) => {
       if (o instanceof THREE.Mesh)
-        (o.material as THREE.MeshStandardMaterial).emissive.set(
-          this.validGhost ? 0x164b29 : 0x8f1725,
+        (o.material as THREE.MeshStandardMaterial).emissive?.set(
+          this.validGhost ? 0x1b6838 : 0x8f1725,
         );
     });
   }
@@ -1215,34 +1681,38 @@ export class IslandWorld {
       const model = this.placeObject(this.buildModel(b.type), b.x, b.z);
       model.rotation.y = b.rotation;
       this.placed.set(b.id, model);
-      if (b.type !== 'garden') {
-        this.blockers.push({
-          id: b.id,
-          x: b.x,
-          z: b.z,
-          r: b.type === 'cottage' ? 3.2 : b.type === 'fence' ? 1.8 : 0.9,
-        });
-        if (
-          b.type === 'workbench' ||
-          b.type === 'campfire' ||
+      if (b.type !== 'garden' && b.type !== 'fence') {
+        const kind: Entity['kind'] =
           b.type === 'cottage'
-        )
-          this.entity(
-            b.id,
-            b.type,
-            RECIPES[b.type].name,
-            b.x,
-            b.z,
-            model,
-            b.type === 'cottage' ? 3 : 0.9,
-          );
+            ? 'cottage'
+            : b.type === 'well'
+              ? 'spring'
+              : b.type === 'market'
+                ? 'market'
+                : ['coop', 'beehive'].includes(b.type)
+                  ? 'production'
+                  : 'station';
+        this.entity(
+          b.id,
+          kind,
+          RECIPES[b.type].name,
+          b.x,
+          b.z,
+          model,
+          Math.max(...RECIPES[b.type].size!) / 2,
+        );
       }
     }
     for (const p of state.plots) {
       const stage =
         p.planted === null ? -1 : Math.min(3, Math.floor(growth(p) * 3));
       const existing = this.plantGroups.get(p.id);
-      if (existing?.stage === stage && existing.watered === p.watered) continue;
+      if (
+        existing?.stage === stage &&
+        existing.watered === p.watered &&
+        existing.crop === p.crop
+      )
+        continue;
       if (existing) {
         this.scene.remove(existing.group);
         this.entities = this.entities.filter((e) => e.id !== p.id);
@@ -1261,21 +1731,26 @@ export class IslandWorld {
       for (const z of [-0.67, 0.67])
         this.addMesh(this.rimGeometry, rim, 0, 0.08, z, g);
       if (stage >= 0) {
-        const crop = makeCrop(stage);
+        const crop = makeCropVariant(p.crop, stage);
         crop.scale.setScalar(0.85);
         g.add(crop);
       }
       this.placeObject(g, p.x, p.z);
-      this.plantGroups.set(p.id, { group: g, stage, watered: p.watered });
+      this.plantGroups.set(p.id, {
+        group: g,
+        stage,
+        watered: p.watered,
+        crop: p.crop,
+      });
       this.entity(
         p.id,
         'plot',
         stage < 0
           ? 'Plant a seed'
           : stage === 3
-            ? 'Harvest carrots'
+            ? `Harvest ${CROPS[p.crop].name.toLowerCase()}`
             : p.watered
-              ? 'Carrots are growing'
+              ? `${CROPS[p.crop].name} is growing`
               : 'Water the seedlings',
         p.x,
         p.z,
@@ -1285,9 +1760,29 @@ export class IslandWorld {
     }
     const crystal = this.entities.find((e) => e.id === 'crystal');
     if (crystal) crystal.object.visible = !state.stats.explored;
-    this.beacon.visible = state.won;
+    this.beacon.visible = state.projects.lighthouse;
     for (const e of this.entities) {
-      if (['wood', 'stone', 'fiber'].includes(e.kind)) {
+      if (e.kind === 'relic')
+        e.object.visible = !state.collected.includes(e.id);
+      if (e.kind === 'project') {
+        e.object.userData.complete =
+          state.projects[e.id as keyof typeof state.projects];
+        const c = e.object.getObjectByName('project-light') as
+          | THREE.Mesh
+          | undefined;
+        if (c)
+          (c.material as THREE.MeshStandardMaterial).emissive.set(
+            e.object.userData.complete ? 0x55c8a2 : 0x815220,
+          );
+      }
+    }
+    this.equipTool();
+    for (const e of this.entities) {
+      if (
+        ['wood', 'stone', 'fiber', 'ore', 'clay', 'mushroom', 'apple'].includes(
+          e.kind,
+        )
+      ) {
         const depleted = (state.depleted[e.id] ?? 0) > Date.now();
         e.object.scale.setScalar(
           (e.object.userData.originalScale ??= e.object.scale.x) *
@@ -1312,9 +1807,7 @@ export class IslandWorld {
   }
   private recoverPlayer() {
     const p = this.player.position,
-      valid = (x: number, z: number) =>
-        onLand(x, z, 1) &&
-        !this.blockers.some((b) => Math.hypot(x - b.x, z - b.z) < b.r + 0.4);
+      valid = (x: number, z: number) => onLand(x, z, 1) && this.walkable(x, z);
     if (valid(p.x, p.z)) return;
     for (let r = 0.6; r < 55; r += 0.6)
       for (let i = 0; i < 40; i++) {
@@ -1390,9 +1883,7 @@ export class IslandWorld {
         dx = (dx / len) * speed;
         dz = (dz / len) * speed;
         const p = this.player.position;
-        const allowed = (x: number, z: number) =>
-          onLand(x, z, 0.8) &&
-          !this.blockers.some((b) => Math.hypot(x - b.x, z - b.z) < b.r + 0.25);
+        const allowed = (x: number, z: number) => this.walkable(x, z);
         let moved = false;
         if (allowed(p.x + dx, p.z)) {
           p.x += dx;
@@ -1463,12 +1954,26 @@ export class IslandWorld {
         this.sync();
       }
     }
-    const goal = this.paused
+    if (this.buildType && !this.paused) {
+      this.updateGrid();
+      this.updateGhost();
+    }
+    this.sun.position.set(
+      this.player.position.x - 18,
+      36,
+      this.player.position.z + 15,
+    );
+    this.sun.target.position.set(
+      this.player.position.x,
+      0,
+      this.player.position.z,
+    );
+    const goal = !s.started
       ? new THREE.Vector3(0, 0, 2)
       : new THREE.Vector3(
-          this.player.position.x * 0.87,
+          this.player.position.x,
           0,
-          this.player.position.z * 0.87 - 1,
+          this.player.position.z - 1,
         );
     this.target.lerp(goal, 1 - Math.exp(-dt * 2));
     this.camera.position.set(
@@ -1530,9 +2035,16 @@ export class IslandWorld {
           mats.add(m);
       }
     });
+    this.scene.traverse((o) => {
+      if (o instanceof THREE.Sprite) {
+        o.material.map?.dispose();
+        o.material.dispose();
+      }
+    });
     geos.forEach((g) => g.dispose());
     mats.forEach((m) => m.dispose());
     disposeAssetLibrary();
+    disposeExtraModelLibrary();
     this.renderer.dispose();
     this.renderer.domElement.remove();
   }

@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -40,22 +40,39 @@ import {
   RotateCcw,
   Maximize,
   Save,
-  Keyboard,
-  Clock,
+  Fish,
+  Egg,
+  Flower2,
+  LockKeyhole,
+  CircleDot,
+  MapPin,
 } from 'lucide-react';
 import {
   QUESTS,
   RECIPES,
   RESOURCE_NAMES,
+  STRUCTURES,
+  CRAFTABLES,
+  CONTRACTS,
+  PROJECT_COSTS,
+  PROJECT_LOCATIONS,
+  RELIC_LOCATIONS,
+  NPCS,
+  REGIONS,
+  ACT_NAMES,
+  count,
   currentQuest,
   canAfford,
+  unlocked,
   type GameState,
   type Resource,
   type Structure,
+  type Craftable,
+  type Project,
+  type Npc,
 } from '@/lib/game/state';
 import { shoreRadius } from '@/lib/game/terrain';
-
-const resourceIcons = {
+const resourceIcons: Partial<Record<Resource, typeof Package>> = {
   wood: TreePine,
   stone: Mountain,
   fiber: Leaf,
@@ -64,13 +81,21 @@ const resourceIcons = {
   plank: Package,
   bread: Heart,
   crystal: Star,
+  fish: Fish,
+  egg: Egg,
+  lavender: Flower2,
+  wheat: Wheat,
+  honey: Flower2,
 };
-const buildIcons = {
+const buildIcons: Partial<Record<Structure, typeof Hammer>> = {
   workbench: Hammer,
   campfire: Flame,
   cottage: House,
-  fence: Package,
   garden: Sprout,
+  greenhouse: Sprout,
+  coop: Egg,
+  beehive: Flower2,
+  observatory: Star,
 };
 type Props = {
   panel: string;
@@ -78,101 +103,16 @@ type Props = {
   close: () => void;
   place: (type: Structure) => void;
   pack: (id: string) => void;
-  craft: (type: 'plank' | 'bread') => void;
+  craft: (type: Craftable, amount?: number) => void;
   eat: (type: 'bread' | 'carrot') => void;
+  contract: (id: string) => void;
+  trade: (type: Resource, sell: boolean) => void;
   setting: (key: 'sound' | 'quality', value: boolean | 'high' | 'low') => void;
   save: () => void;
   exportSave: () => void;
   importSave: (file: File) => void;
   restart: () => void;
 };
-
-function IslandMap({ state }: { state: GameState }) {
-  const d =
-    Array.from({ length: 80 }, (_, i) => {
-      const a = (i / 79) * Math.PI * 2,
-        r = shoreRadius(a);
-      return `${i ? 'L' : 'M'}${160 + Math.cos(a) * r * 4},${119 + Math.sin(a) * r * 3.6}`;
-    }).join(' ') + ' Z';
-  return (
-    <div className="journal-map">
-      <svg
-        viewBox="0 0 320 235"
-
-        aria-label="Island map with your position, homestead, northern ruins, and eastern lighthouse"
-      >
-        <defs>
-          <pattern
-            id="map-water"
-            width="17"
-            height="17"
-            patternUnits="userSpaceOnUse"
-          >
-            <path
-              d="M3 9 Q6 6 9 9"
-              fill="none"
-              stroke="#80bbae"
-              strokeWidth=".7"
-              opacity=".25"
-            />
-          </pattern>
-        </defs>
-        <rect width="320" height="235" fill="#214f49" />
-        <rect width="320" height="235" fill="url(#map-water)" />
-        <path d={d} fill="#879e65" stroke="#c2bf8b" strokeWidth="4" />
-        <path
-          d="M138 59 Q161 111 163 170 M138 122 Q185 171 225 87"
-          fill="none"
-          stroke="#d0c49a"
-          strokeWidth="3"
-          opacity=".7"
-        />
-        {[
-          [-6, -17, 'Ruins'],
-          [17, -9, 'Lighthouse'],
-          [-7, 0, 'Homestead'],
-          [6, 18, 'Shore'],
-        ].map(([x, z, label]) => (
-          <g key={label}>
-            <circle
-              cx={160 + Number(x) * 4}
-              cy={119 + Number(z) * 3.6}
-              r="4"
-              fill="#314e38"
-              stroke="#f6ebbb"
-              strokeWidth="1.5"
-            />
-            <text
-              x={160 + Number(x) * 4}
-              y={109 + Number(z) * 3.6}
-              textAnchor="middle"
-              fill="#203d2d"
-              fontSize="9"
-              fontWeight="700"
-            >
-              {label}
-            </text>
-          </g>
-        ))}
-        <circle
-          cx={160 + state.player.x * 4}
-          cy={119 + state.player.z * 3.6}
-          r="5"
-          fill="#f9e9a4"
-          stroke="#274d3b"
-          strokeWidth="2"
-        />
-        <text x="293" y="25" fill="#d5dfb4" fontSize="10">
-          N
-        </text>
-        <path d="M297 31L293 40H301Z" fill="#d5dfb4" />
-      </svg>
-      <span>
-        <span /> You are here <i /> Hand-drawn by a goose. Mostly accurate.
-      </span>
-    </div>
-  );
-}
 function Costs({
   state,
   cost,
@@ -184,14 +124,16 @@ function Costs({
     <div className="recipe-costs">
       {Object.entries(cost).map(([r, n]) => {
         const key = r as Resource,
-          Icon = resourceIcons[key];
+          Icon = resourceIcons[key] ?? Package;
         return (
           <span
             key={r}
             className={state.inventory[key] >= n! ? 'enough' : 'short'}
           >
-            <Icon size={13} />
-            {state.inventory[key]} / {n}
+            <Icon size={14} />
+            <b>
+              {state.inventory[key]} / {n}
+            </b>
             <span>{RESOURCE_NAMES[key]}</span>
           </span>
         );
@@ -199,17 +141,96 @@ function Costs({
     </div>
   );
 }
+function IslandMap({ state }: { state: GameState }) {
+  const X = (x: number) => 210 + x * 3.5,
+    Z = (z: number) => 180 + z * 3.1;
+  const d =
+    Array.from({ length: 101 }, (_, i) => {
+      const a = (i / 100) * Math.PI * 2,
+        r = shoreRadius(a);
+      return `${i ? 'L' : 'M'}${X(Math.cos(a) * r)},${Z(Math.sin(a) * r)}`;
+    }).join(' ') + ' Z';
+  return (
+    <div className="expansion-map">
+      <svg
+        viewBox="0 0 420 360"
+        aria-label="Map of all six island regions with residents, projects, relics and your location"
+      >
+        <rect width="420" height="360" rx="18" fill="#245c5d" />
+        <path d={d} fill="#88a873" stroke="#d2c696" strokeWidth="5" />
+        {Object.values(REGIONS).map((r) => (
+          <path
+            key={r.name}
+            d={`M${X(0)} ${Z(7)} L${X(r.x)} ${Z(r.z)}`}
+            stroke="#d4c292"
+            strokeWidth="3"
+            opacity=".8"
+          />
+        ))}
+        <path
+          d={`M${X(-42)} ${Z(-30)}H${X(42)}`}
+          stroke="#617c70"
+          strokeWidth="4"
+          strokeDasharray="5 5"
+        />
+        {Object.entries(REGIONS).map(([key, r]) => (
+          <g key={key}>
+            <circle cx={X(r.x)} cy={Z(r.z)} r="5" fill="#315b41" />
+            <text x={X(r.x)} y={Z(r.z) - 10} textAnchor="middle">
+              {r.name}
+            </text>
+          </g>
+        ))}
+        {RELIC_LOCATIONS.filter((r) => !state.collected.includes(r.id)).map(
+          (r) => (
+            <text className="map-relic" key={r.id} x={X(r.x)} y={Z(r.z)}>
+              ✦
+            </text>
+          ),
+        )}
+        {Object.entries(PROJECT_LOCATIONS).map(([key, r]) => (
+          <rect
+            key={key}
+            x={X(r.x) - 3}
+            y={Z(r.z) - 3}
+            width="6"
+            height="6"
+            fill={state.projects[key as Project] ? '#fff4b6' : '#aa703b'}
+          />
+        ))}
+        <circle
+          cx={X(state.player.x)}
+          cy={Z(state.player.z)}
+          r="5.5"
+          fill="#fff6ca"
+          stroke="#214638"
+          strokeWidth="2"
+        />
+      </svg>
+      <p>● You · ✦ Lost relic · ■ Community project · North is up</p>
+    </div>
+  );
+}
 export default function Panels(props: Props) {
   const { panel, state, close } = props;
-  const [confirm, setConfirm] = useState(false);
-  const titles: Record<string, string> = {
-    build: 'Make yourself at home.',
-    craft: 'A little handmade magic.',
-    inventory: 'A pocket full of possibilities.',
-    journal: 'Your little big adventure.',
-    pause: 'Take a breather.',
-    help: 'The Bramblewick field guide.',
-  };
+  const [confirm, setConfirm] = useState(false),
+    [batch, setBatch] = useState(1);
+  const [now, setNow] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  const q = currentQuest(state),
+    quest = QUESTS[q],
+    titles: Record<string, string> = {
+      build: 'A village of your own.',
+      craft: 'Good things, handmade.',
+      inventory: 'A pocket full of possibilities.',
+      journal: 'The great Bramblewick adventure.',
+      pause: 'Take a breather.',
+      help: 'The Bramblewick field guide.',
+      market: 'The goose economy.',
+    };
   return (
     <>
       <Dialog
@@ -218,281 +239,493 @@ export default function Panels(props: Props) {
           if (!v) close();
         }}
       >
-        <DialogContent className={`game-dialog panel-${panel}`}>
+        <DialogContent className="game-dialog" showCloseButton>
           <div className="panel-heading">
-            <span className="eyebrow">
-              MOSS & MISCHIEF ·{' '}
-              {panel === 'pause' ? 'ISLAND TIME' : panel.toUpperCase()}
-            </span>
-            <DialogTitle>{titles[panel]}</DialogTitle>
+            <span className="eyebrow">MOSS & MISCHIEF · BRAMBLEWICK</span>
+            <DialogTitle>{titles[panel] ?? 'Your island'}</DialogTitle>
             <DialogDescription>
-              {panel === 'build'
-                ? 'Good things start with a little timber and unreasonable optimism.'
-                : panel === 'craft'
-                  ? 'Gather ingredients. Make useful things. Take all the credit.'
-                  : panel === 'journal'
-                    ? 'Six small steps. One island that needs you.'
-                    : panel === 'inventory'
-                      ? 'Travel light. Carry an entire forest anyway.'
-                      : panel === 'help'
-                        ? 'Everything you need to know. The goose will fill in the rest.'
-                        : 'Your island will be right here.'}
+              {panel === 'journal'
+                ? `${state.completed.length} / ${QUESTS.length} quests · ${state.xp} reputation · ${state.inventory.coins} acorns`
+                : 'Grow roots. Make something. Leave room for a goose.'}
             </DialogDescription>
           </div>
           {panel === 'build' && (
-            <>
-              <div className="recipe-grid">
-                {(
-                  [
-                    'workbench',
-                    'campfire',
-                    'garden',
-                    'fence',
-                    'cottage',
-                  ] as Structure[]
-                ).map((type) => {
-                  const recipe = RECIPES[type],
-                    Icon = buildIcons[type],
-                    enabled = canAfford(state, recipe.cost);
-                  return (
-                    <article className="recipe-card" key={type}>
-                      <div className={`recipe-art art-${type}`}>
-                        <Icon size={39} strokeWidth={1.3} />
-                        {state.buildings.some((b) => b.type === type) && (
-                          <span className="built-badge">
-                            <Check size={10} /> BUILT
-                          </span>
-                        )}
-                      </div>
-                      <div className="recipe-info">
-                        <h3>{recipe.name}</h3>
-                        <p>{recipe.description}</p>
-                        <Costs state={state} cost={recipe.cost} />
+            <Tabs defaultValue="plans">
+              <TabsList>
+                <TabsTrigger value="plans">Building plans</TabsTrigger>
+                <TabsTrigger value="placed">
+                  My village ({state.buildings.length})
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="plans">
+                <p className="panel-note">
+                  Select a plan to see the placement grid. Green cells fit the
+                  entire footprint; red cells explain what blocks it. R rotates.
+                  Click or Enter places.
+                </p>
+                <div className="expansion-recipes">
+                  {STRUCTURES.map((type) => {
+                    const r = RECIPES[type],
+                      Icon = buildIcons[type] ?? House,
+                      open = unlocked(state, type);
+                    return (
+                      <article
+                        className={`expansion-recipe ${!open ? 'locked' : ''}`}
+                        key={type}
+                      >
+                        <div className="recipe-title">
+                          <Icon size={27} />
+                          <div>
+                            <h3>{r.name}</h3>
+                            <small>{r.size?.join(' × ')}m footprint</small>
+                          </div>
+                          {!open && <LockKeyhole size={16} />}
+                        </div>
+                        <p>{r.description}</p>
+                        <Costs state={state} cost={r.cost} />
                         <button
-                          className="recipe-button"
-                          disabled={!enabled}
+                          className="recipe-action"
+                          disabled={!open || !canAfford(state, r.cost)}
                           onClick={() => props.place(type)}
                         >
-                          {enabled ? 'Choose a spot' : 'Gather materials'}
+                          {!open
+                            ? `After quest ${r.unlock}`
+                            : canAfford(state, r.cost)
+                              ? 'Choose location'
+                              : 'More materials needed'}
                           <ArrowRight size={15} />
                         </button>
-                      </div>
-                    </article>
-                  );
-                })}
-              </div>
-              <p className="panel-note">
-                <Hammer size={14} /> Place on clear ground near your character.
-                R rotates. Escape cancels. Materials are used only when placed.
-              </p>
-              {state.buildings.length > 0 && (
-                <div className="homestead-list">
-                  <h3>Your homestead</h3>
-                  {state.buildings.map((b, i) => (
-                    <div key={b.id}>
-                      <span>
-                        {RECIPES[b.type].name} <small>#{i + 1}</small>
-                      </span>
-                      <button onClick={() => props.pack(b.id)}>
-                        Pack away · full refund <RotateCcw size={12} />
-                      </button>
-                    </div>
-                  ))}
+                      </article>
+                    );
+                  })}
                 </div>
-              )}
-            </>
-          )}
-          {panel === 'craft' && (
-            <Tabs defaultValue="materials" className="craft-tabs">
-              <TabsList>
-                <TabsTrigger value="materials">Materials</TabsTrigger>
-                <TabsTrigger value="kitchen">Campfire kitchen</TabsTrigger>
-              </TabsList>
-              {(['materials', 'kitchen'] as const).map((tab, i) => {
-                const type = i ? 'bread' : 'plank',
-                  recipe = RECIPES[type],
-                  station = i ? 'campfire' : 'workbench',
-                  hasStation = state.buildings.some((b) => b.type === station);
-                return (
-                  <TabsContent value={tab} key={tab}>
-                    <article className="craft-feature">
-                      <div className={`craft-emblem ${i ? 'warm' : ''}`}>
-                        {i ? (
-                          <Heart size={72} strokeWidth={1} />
-                        ) : (
-                          <Package size={72} strokeWidth={1} />
-                        )}
-                        <span>SMALL BATCH · ISLAND MADE</span>
-                      </div>
+              </TabsContent>
+              <TabsContent value="placed">
+                <p className="panel-note">
+                  Pack a building to move it. All construction materials are
+                  returned; planted seeds and feed are refunded.
+                </p>
+                <div className="village-list">
+                  {state.buildings.length === 0 && (
+                    <p>Your first building is waiting in the plans tab.</p>
+                  )}
+                  {state.buildings.map((b) => (
+                    <article key={b.id}>
                       <div>
-                        <span className="recipe-category">
-                          {i ? 'SOMETHING DELICIOUS' : 'THE BUILDING BLOCKS'}
-                        </span>
-                        <h3>{recipe.name}</h3>
-                        <p>{recipe.description}</p>
-                        <Costs state={state} cost={recipe.cost} />
-                        <div className="station-status">
-                          {hasStation ? (
-                            <Check size={14} />
-                          ) : (
-                            <Hammer size={14} />
-                          )}{' '}
-                          {hasStation
-                            ? `${i ? 'Campfire' : 'Workbench'} ready`
-                            : `Build a ${station} to unlock this recipe`}
-                        </div>
-                        <button
-                          className="start-button"
-                          disabled={
-                            !hasStation || !canAfford(state, recipe.cost)
-                          }
-                          onClick={() => props.craft(type)}
-                        >
-                          Craft {recipe.name.toLowerCase()}
-                          <ArrowRight size={17} />
-                        </button>
-                        <small className="owned-count">
-                          In your backpack: {state.inventory[type]}
+                        <b>{RECIPES[b.type].name}</b>
+                        <small>
+                          {b.x.toFixed(0)}, {b.z.toFixed(0)}
+                          {state.production[b.id]
+                            ? ` · ${now >= state.production[b.id] ? 'Produce ready' : 'Producing…'}`
+                            : ''}
                         </small>
                       </div>
+                      <button onClick={() => props.pack(b.id)}>
+                        Pack away
+                      </button>
                     </article>
-                  </TabsContent>
-                );
-              })}
+                  ))}
+                </div>
+              </TabsContent>
             </Tabs>
+          )}
+          {panel === 'craft' && (
+            <>
+              <div className="batch-select">
+                <span>Batch size</span>
+                {[1, 5, 10].map((n) => (
+                  <button
+                    key={n}
+                    className={batch === n ? 'active' : ''}
+                    onClick={() => setBatch(n)}
+                  >
+                    {n}
+                  </button>
+                ))}
+                <small>
+                  Build the required station anywhere on your island.
+                </small>
+              </div>
+              <Tabs defaultValue="material">
+                <TabsList>
+                  <TabsTrigger value="material">Materials</TabsTrigger>
+                  <TabsTrigger value="food">Kitchen</TabsTrigger>
+                </TabsList>
+                {(['material', 'food'] as const).map((category) => (
+                  <TabsContent key={category} value={category}>
+                    <div className="expansion-recipes">
+                      {CRAFTABLES.filter(
+                        (t) => RECIPES[t].category === category,
+                      ).map((type) => {
+                        const r = RECIPES[type],
+                          open = unlocked(state, type),
+                          station = state.buildings.some(
+                            (b) => b.type === r.station,
+                          ),
+                          cost = Object.fromEntries(
+                            Object.entries(r.cost).map(([k, v]) => [
+                              k,
+                              v! * batch,
+                            ]),
+                          ),
+                          Icon = resourceIcons[type] ?? Package;
+                        return (
+                          <article className="expansion-recipe" key={type}>
+                            <div className="recipe-title">
+                              <Icon size={26} />
+                              <div>
+                                <h3>
+                                  {r.name} × {batch}
+                                </h3>
+                                <small>
+                                  {r.station && RECIPES[r.station].name} ·{' '}
+                                  {state.inventory[type]} in backpack
+                                </small>
+                              </div>
+                            </div>
+                            <p>{r.description}</p>
+                            <Costs state={state} cost={cost} />
+                            <button
+                              className="recipe-action"
+                              disabled={
+                                !open || !station || !canAfford(state, cost)
+                              }
+                              onClick={() => props.craft(type, batch)}
+                            >
+                              {!open
+                                ? `After quest ${r.unlock}`
+                                : !station
+                                  ? `Build ${RECIPES[r.station!].name}`
+                                  : canAfford(state, cost)
+                                    ? `Craft ${batch}`
+                                    : 'More ingredients needed'}
+                              <Hammer size={15} />
+                            </button>
+                          </article>
+                        );
+                      })}
+                    </div>
+                  </TabsContent>
+                ))}
+              </Tabs>
+            </>
           )}
           {panel === 'inventory' && (
             <>
-              <div className="inventory-grid">
+              <div className="backpack-summary">
+                <Package size={24} />
+                <span>
+                  {state.inventory.coins} acorns · {state.xp} reputation ·{' '}
+                  {state.collected.length}/4 relics
+                </span>
+              </div>
+              <div className="expanded-inventory">
                 {(Object.keys(RESOURCE_NAMES) as Resource[]).map((r) => {
-                  const Icon = resourceIcons[r];
+                  const Icon = resourceIcons[r] ?? Package;
                   return (
                     <article
                       key={r}
-                      className={`inventory-item ${state.inventory[r] ? '' : 'is-empty'}`}
+                      className={!state.inventory[r] ? 'empty' : ''}
                     >
-                      <Icon size={28} strokeWidth={1.5} />
+                      <Icon size={25} />
                       <b>{state.inventory[r]}</b>
-                      <h3>{RESOURCE_NAMES[r]}</h3>
-                      {(r === 'bread' || r === 'carrot') &&
+                      <span>{RESOURCE_NAMES[r]}</span>
+                      {(r === 'carrot' || r === 'bread') &&
                         state.inventory[r] > 0 && (
                           <button onClick={() => props.eat(r)}>
                             Eat · +{r === 'bread' ? 50 : 20} energy
                           </button>
                         )}
-                      {r === 'crystal' && <span>Quest treasure</span>}
                     </article>
                   );
                 })}
               </div>
-              <p className="panel-note">
-                <Sprout size={14} /> Timber, stone, and wildflowers regrow.
-                Harvested carrots return extra seeds.
-              </p>
             </>
           )}
           {panel === 'journal' && (
-            <div className="journal-layout">
-              <div className="quest-list">
-                {QUESTS.map((q, i) => (
-                  <article
-                    className={`${state.completed.includes(i) ? 'done ' : ''}${currentQuest(state) === i ? 'active' : ''}`}
-                    key={i}
-                  >
-                    <div className="chapter-index">
-                      {state.completed.includes(i) ? (
-                        <Check size={17} />
+            <Tabs defaultValue="story">
+              <TabsList>
+                <TabsTrigger value="story">Story</TabsTrigger>
+                <TabsTrigger value="map">Island map</TabsTrigger>
+                <TabsTrigger value="projects">Projects</TabsTrigger>
+                <TabsTrigger value="requests">Requests</TabsTrigger>
+              </TabsList>
+              <TabsContent value="story">
+                <article className="active-quest">
+                  <span className="eyebrow">
+                    ACT {quest.act} · QUEST {q + 1} / {QUESTS.length}
+                  </span>
+                  <h3>{quest.title}</h3>
+                  <p>{quest.detail}</p>
+                  <ul>
+                    {quest.objectives.map((o) => (
+                      <li key={o.key}>
+                        <span>
+                          {count(state, o.key) >= o.target ? (
+                            <Check size={16} />
+                          ) : (
+                            <CircleDot size={16} />
+                          )}{' '}
+                          {o.label}
+                        </span>
+                        <b>
+                          {Math.min(count(state, o.key), o.target)} / {o.target}
+                        </b>
+                      </li>
+                    ))}
+                  </ul>
+                  <blockquote>“{quest.quote}”</blockquote>
+                  <small>
+                    {NPCS[quest.npc as Npc]?.name} · Reward:{' '}
+                    {quest.reward.coins} acorns + {quest.reward.xp} reputation
+                  </small>
+                </article>
+                <div className="campaign-list">
+                  {ACT_NAMES.map((name, act) => (
+                    <details key={name} open={act === quest.act - 1}>
+                      <summary>
+                        Act {act + 1} · {name}
+                        <small>
+                          {
+                            state.completed.filter(
+                              (i) => QUESTS[i].act === act + 1,
+                            ).length
+                          }
+                          /
+                          {QUESTS.filter((item) => item.act === act + 1).length}{' '}
+                          complete
+                        </small>
+                      </summary>
+                      {QUESTS.map(
+                        (item, i) =>
+                          item.act === act + 1 && (
+                            <div
+                              key={item.id}
+                              className={i === q ? 'current' : ''}
+                            >
+                              <span>
+                                {state.completed.includes(i) ? (
+                                  <Check size={16} />
+                                ) : (
+                                  <span className="quest-number">{i + 1}</span>
+                                )}
+                              </span>
+                              <div>
+                                <b>{item.title}</b>
+                                <p>{item.short}</p>
+                              </div>
+                            </div>
+                          ),
+                      )}
+                    </details>
+                  ))}
+                </div>
+              </TabsContent>
+              <TabsContent value="map">
+                <IslandMap state={state} />
+                <div className="resident-list">
+                  {Object.entries(NPCS).map(([id, n]) => (
+                    <div key={id}>
+                      <MapPin size={16} />
+                      <span>
+                        <b>{n.name}</b>
+                        <small>
+                          {REGIONS[n.region].name} · {n.x}, {n.z}
+                        </small>
+                      </span>
+                      {state.counters[`talk:${id}`] ? (
+                        <Check size={16} />
                       ) : (
-                        String(i + 1).padStart(2, '0')
+                        <small>Not yet met</small>
                       )}
                     </div>
-                    <div>
-                      <span>
-                        {state.completed.includes(i)
-                          ? 'A CHAPTER WELL SPENT'
-                          : `CHAPTER ${i + 1}`}
-                      </span>
-                      <h3>{q.title}</h3>
-                      {(currentQuest(state) === i ||
-                        state.completed.includes(i)) && <p>{q.detail}</p>}
-                    </div>
+                  ))}
+                </div>
+              </TabsContent>
+              <TabsContent value="projects">
+                <p className="panel-note">
+                  Bring these materials to the marked project site and press E.
+                  Buildings alone do not complete community projects.
+                </p>
+                <div className="expansion-recipes">
+                  {(Object.keys(PROJECT_LOCATIONS) as Project[]).map((type) => {
+                    const r = PROJECT_LOCATIONS[type];
+                    return (
+                      <article className="expansion-recipe" key={type}>
+                        <h3>
+                          {r.name} {state.projects[type] && '✓'}
+                        </h3>
+                        <p>{RECIPES[type].description}</p>
+                        <small>
+                          Map coordinates {r.x}, {r.z}
+                          {type === 'gate' ? ' · Requires all four relics' : ''}
+                          {['observatory', 'festival'].includes(type)
+                            ? ` · Build ${RECIPES[type].name} first`
+                            : ''}
+                        </small>
+                        <Costs state={state} cost={PROJECT_COSTS[type]} />
+                        <p className="project-status">
+                          {state.projects[type]
+                            ? 'Restored. Honk approved.'
+                            : `Visit the site to contribute · after quest ${type === 'festival' ? 35 : RECIPES[type].unlock}`}
+                        </p>
+                      </article>
+                    );
+                  })}
+                </div>
+              </TabsContent>
+              <TabsContent value="requests">
+                <p className="panel-note">
+                  Meet each resident before delivering. Requests repeat after 90
+                  seconds and reward acorns for the market. Story objectives
+                  track your lifetime work, so selling produce keeps your
+                  progress.
+                </p>
+                <div className="expansion-recipes">
+                  {CONTRACTS.map((c) => {
+                    const met = !!state.counters[`talk:${c.npc}`],
+                      cooldown = (state.contracts[c.id] ?? 0) > now;
+                    return (
+                      <article className="expansion-recipe" key={c.id}>
+                        <small>{NPCS[c.npc as Npc]?.name}</small>
+                        <h3>{c.title}</h3>
+                        <p>{c.description}</p>
+                        <Costs state={state} cost={c.cost} />
+                        <button
+                          className="recipe-action"
+                          disabled={
+                            !met || cooldown || !canAfford(state, c.cost)
+                          }
+                          onClick={() => props.contract(c.id)}
+                        >
+                          {!met
+                            ? 'Meet this resident first'
+                            : cooldown
+                              ? 'Resident is enjoying the delivery'
+                              : `Deliver · +${c.reward.coins} acorns`}
+                        </button>
+                      </article>
+                    );
+                  })}
+                </div>
+              </TabsContent>
+            </Tabs>
+          )}
+          {panel === 'market' && (
+            <>
+              <p className="panel-note">
+                Sell one item at a time. Save ingredients for your community
+                projects. All acorns are earned in the game.
+              </p>
+              <button
+                className="recipe-action"
+                onClick={() => props.trade('seed', false)}
+                disabled={
+                  !state.buildings.some((b) => b.type === 'market') ||
+                  state.inventory.coins < 5
+                }
+              >
+                Buy 10 seeds · 5 acorns
+              </button>
+              <div className="expanded-inventory">
+                {(
+                  [
+                    'carrot',
+                    'wheat',
+                    'pumpkin',
+                    'lavender',
+                    'fish',
+                    'apple',
+                    'mushroom',
+                    'bread',
+                    'jam',
+                    'pie',
+                    'honey',
+                    'egg',
+                  ] as Resource[]
+                ).map((r) => (
+                  <article key={r}>
+                    <b>{state.inventory[r]}</b>
+                    <span>{RESOURCE_NAMES[r]}</span>
+                    <button
+                      disabled={!state.inventory[r]}
+                      onClick={() => props.trade(r, true)}
+                    >
+                      Sell · +
+                      {r === 'pie'
+                        ? 15
+                        : ['bread', 'jam', 'honey'].includes(r)
+                          ? 5
+                          : 2}{' '}
+                      acorns
+                    </button>
                   </article>
                 ))}
               </div>
-              <aside>
-                <IslandMap state={state} />
-                <blockquote>
-                  {QUESTS[currentQuest(state)].quote}
-                  <cite>Mayor Honk, allegedly in charge</cite>
-                </blockquote>
-                <div className="journal-stats">
-                  <span>
-                    <Clock size={15} />
-                    {Math.floor(state.elapsed / 60)} min on island
-                  </span>
-                  <span>
-                    <House size={15} />
-                    {state.buildings.length} things built
-                  </span>
-                </div>
-              </aside>
-            </div>
+            </>
           )}
           {panel === 'help' && (
-            <div className="help-layout">
-              <div>
-                <h3>
-                  <Keyboard size={19} /> Finding your feet
-                </h3>
-                <dl>
-                  <dt>Walk</dt>
-                  <dd>W A S D or arrow keys</dd>
-                  <dt>Interact</dt>
-                  <dd>E or click a nearby object</dd>
-                  <dt>Run / hop</dt>
-                  <dd>Shift / Space</dd>
-                  <dt>Build / craft</dt>
-                  <dd>B / C</dd>
-                  <dt>Backpack / journal</dt>
-                  <dd>I / J</dd>
-                  <dt>Orbit / zoom</dt>
-                  <dd>Right-drag / scroll</dd>
-                  <dt>Rotate a building</dt>
-                  <dd>R while placing</dd>
-                  <dt>Pause / close</dt>
-                  <dd>Escape</dd>
-                </dl>
-                <p>
-                  Click the ground to walk there. On touchscreens, use the arrow
-                  pad or tap the ground.
-                </p>
-              </div>
-              <div>
-                <h3>
-                  <Sprout size={19} /> Growing a good life
-                </h3>
-                <p>
-                  <b>Gather:</b> Walk up to trees, rocks, or wildflowers and
-                  interact. Your tools are chosen automatically.
-                </p>
-                <p>
-                  <b>Farm:</b> Interact with an empty garden bed to plant, again
-                  to water, and once more when ripe. Watered carrots grow in 35
-                  seconds.
-                </p>
-                <p>
-                  <b>Build:</b> Pick a recipe, then click a clear spot close to
-                  you. A green preview means it fits.
-                </p>
-                <p>
-                  <b>Explore:</b> The ruins are north; the lighthouse is east.
-                  Your journal has a map.
-                </p>
-                <p className="help-tip">
-                  There is no death or hunger. Take your time. Even your stamina
-                  grows back.
-                </p>
-              </div>
+            <div className="expansion-help">
+              <h3>Your tools have jobs.</h3>
+              <p>
+                <b>1 Axe:</b> timber. <b>2 Pickaxe:</b> stone, clay, copper.{' '}
+                <b>3 Seeds:</b> select a crop, then plant empty beds.{' '}
+                <b>4 Water:</b> water growing crops. <b>5 Build:</b> plans and
+                placement. <b>6 Hands:</b> harvest crops, forage, collect
+                relics. <b>7 Rod:</b> fish.
+              </p>
+              <p>
+                <b>E uses your equipped tool.</b> The interaction prompt tells
+                you which tool is needed. Talk, refill water, use stations and
+                contribute to projects with any tool. Click an object to
+                approach it; obstacles may require walking around.
+              </p>
+              <h3>Grow a little more.</h3>
+              <p>
+                Watered carrots take 70 seconds, wheat 95, lavender 110, and
+                pumpkins 140. Unwatered plants grow slowly. Harvests return
+                produce and seeds. Gather wildflowers for free seeds. Refill at
+                the spring near (1, 11), or build a well. A greenhouse speeds
+                and waters new plantings within 9m.
+              </p>
+              <h3>Build with confidence.</h3>
+              <p>
+                The green grid shows where the entire selected building fits.
+                Red cells are blocked. The preview explains the reason. Build
+                within 14m, away from paths’ residents, shore, crops, and other
+                structures. R rotates, Enter or click places, Esc cancels. Pack
+                buildings from My Village for a full materials refund.
+              </p>
+              <h3>Workshops and wildlife.</h3>
+              <p>
+                Build a kiln to fire bricks, a forge for ingots, a windmill for
+                flour, and a tavern for feasts. Your crafting panel shows each
+                recipe and can make batches. Feed a coop 3 wheat or an apiary 3
+                lavender, then return in two minutes to collect eggs or honey.
+              </p>
+              <p>
+                <b>Fishing:</b> meet Captain Minnow in the marsh. At a fish
+                marker, equip the rod, E to cast (1 seed), wait for the golden
+                BITE prompt, then E again within five seconds. Keep close to the
+                marker.
+              </p>
+              <h3>The wider adventure.</h3>
+              <p>
+                Six acts contain 36 story quests. The lighthouse ends Act I; the
+                bridge opens the highlands, and four relics unlock the ancient
+                gate. Your journal contains the map, residents, objective
+                counts, recipes for projects, and 12 repeatable requests.
+              </p>
+              <p>
+                <b>Controls:</b> WASD / arrows to walk, Shift to sprint, Space
+                to hop, right-drag to orbit, scroll to zoom. B build, C craft, I
+                backpack, J journal, Esc pause. Click the toolbar on touch
+                devices.
+              </p>
+              <p className="help-tip">
+                Progress autosaves on this device. Export a backup in Settings.
+                The island keeps growing after the festival.
+              </p>
             </div>
           )}
           {panel === 'pause' && (

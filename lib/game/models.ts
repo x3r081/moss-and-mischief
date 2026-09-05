@@ -291,25 +291,36 @@ export function makeHouse(): THREE.Group {
   });
 
   root.add(mesh(box(5, 2.8, 4), plaster, [0, 1.4, 0]));
-  root.add(
-    mesh(
-      box(5.7, 0.28, 3.15),
+  // Each roof plane rises toward z=0; the old rotations made a valley.
+  const pitch = Math.atan2(1.8, 2.3);
+  for (const side of [-1, 1]) {
+    const roofPanel = mesh(
+      box(5.7, 0.2, Math.hypot(1.8, 2.3)),
       roof,
-      [0, 3.48, -0.82],
+      [0, 3.7, side * 1.15],
       [1, 1, 1],
-      [Math.PI * 0.27, 0, 0],
-    ),
-  );
-  root.add(
-    mesh(
-      box(5.7, 0.28, 3.15),
-      roof,
-      [0, 3.48, 0.82],
-      [1, 1, 1],
-      [-Math.PI * 0.27, 0, 0],
-    ),
-  );
-  root.add(mesh(box(5.8, 0.18, 0.25), darkRoof, [0, 4.4, 0]));
+      [side * pitch, 0, 0],
+    );
+    roofPanel.name = side < 0 ? 'roof-north' : 'roof-south';
+    root.add(roofPanel);
+  }
+  const gableGeometry = geometry('cottage-gables', () => {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute(
+      'position',
+      new THREE.Float32BufferAttribute(
+        [
+          -2.5, 2.8, -2, -2.5, 2.8, 2, -2.5, 4.5, 0, 2.5, 2.8, 2, 2.5, 2.8, -2,
+          2.5, 4.5, 0,
+        ],
+        3,
+      ),
+    );
+    g.computeVertexNormals();
+    return g;
+  });
+  root.add(mesh(gableGeometry, plaster));
+  root.add(mesh(box(5.8, 0.18, 0.25), darkRoof, [0, 4.64, 0]));
 
   // Half-timbered cottage frontage.
   [-2.28, 0, 2.28].forEach((x) =>

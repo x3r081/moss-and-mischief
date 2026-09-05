@@ -1,0 +1,994 @@
+{
+  "main": [
+    {
+      "id": "welcome-mayor",
+      "act": 1,
+      "title": "A Rather Peculiar Welcome",
+      "short": "Meet Mayor Honk",
+      "detail": "Find Mayor Honk by the cottage and introduce yourself.",
+      "quote": "Welcome! I was elected unanimously. I was the only candidate. And the only voter.",
+      "npc": "mayor",
+      "objectives": [
+        {
+          "key": "talk:mayor",
+          "target": 1,
+          "label": "Talk to Mayor Honk"
+        }
+      ],
+      "reward": {
+        "coins": 10,
+        "xp": 15
+      }
+    },
+    {
+      "id": "workbench",
+      "act": 1,
+      "title": "Some Assembly Encouraged",
+      "short": "Build a workbench",
+      "detail": "Gather timber and stone, then place a workbench.",
+      "quote": "Our previous craftsman was a beaver. Excellent work. Ate the invoice.",
+      "npc": "mayor",
+      "objectives": [
+        {
+          "key": "build:workbench",
+          "target": 1,
+          "label": "Build a workbench"
+        }
+      ],
+      "reward": {
+        "coins": 15,
+        "xp": 20
+      }
+    },
+    {
+      "id": "carrot-harvest",
+      "act": 1,
+      "title": "Lettuce Begin",
+      "short": "Harvest three carrots",
+      "detail": "Plant seeds, water the beds, and harvest at least three carrots.",
+      "quote": "Talk to your plants. I usually discuss local zoning.",
+      "npc": "mayor",
+      "objectives": [
+        {
+          "key": "harvest:carrot",
+          "target": 3,
+          "label": "Harvest carrots"
+        }
+      ],
+      "reward": {
+        "coins": 15,
+        "xp": 25
+      }
+    },
+    {
+      "id": "first-bread",
+      "act": 1,
+      "title": "A Toast to Civilization",
+      "short": "Bake carrot bread",
+      "detail": "Use a campfire to bake one loaf of carrot bread.",
+      "quote": "Bread is just a sandwich waiting for purpose.",
+      "npc": "mayor",
+      "objectives": [
+        {
+          "key": "craft:bread",
+          "target": 1,
+          "label": "Bake carrot bread"
+        }
+      ],
+      "reward": {
+        "coins": 20,
+        "xp": 30
+      }
+    },
+    {
+      "id": "first-cottage",
+      "act": 1,
+      "title": "Home, Sweet Slightly Crooked Home",
+      "short": "Build your cottage",
+      "detail": "Raise a cottage on the homestead. A roof is strongly recommended during weather.",
+      "quote": "The property market is wild. Yesterday a mushroom sold for three acorns.",
+      "npc": "mayor",
+      "objectives": [
+        {
+          "key": "build:cottage",
+          "target": 1,
+          "label": "Build a cottage"
+        }
+      ],
+      "reward": {
+        "coins": 25,
+        "xp": 40
+      }
+    },
+    {
+      "id": "restore-lighthouse",
+      "act": 1,
+      "title": "The Light at the End of the Honk",
+      "short": "Restore the lighthouse",
+      "detail": "Recover the sun crystal from the Forgotten Garden ruins at (-6, -18). Bring it with 3 planks and 5 stone to the lighthouse at (17, -9), then press E. This completes the opening act and begins the wider island adventure.",
+      "quote": "I borrowed the lighthouse bulb for my reading lamp. In retrospect, a maritime incident.",
+      "npc": "mayor",
+      "objectives": [
+        {
+          "key": "project:lighthouse",
+          "target": 1,
+          "label": "Restore the lighthouse"
+        }
+      ],
+      "reward": {
+        "coins": 30,
+        "xp": 50
+      }
+    },
+    {
+      "id": "whisperwood-welcome",
+      "act": 2,
+      "title": "A Ranger Arrangement",
+      "short": "Meet Rowan in Whisperwood",
+      "detail": "Follow the western trail into Whisperwood and meet ranger Rowan Bramble.",
+      "quote": "The forest is friendly once you learn which noises are squirrels and which are paperwork.",
+      "npc": "ranger",
+      "objectives": [
+        {
+          "key": "visit:forest",
+          "target": 1,
+          "label": "Visit Whisperwood"
+        },
+        {
+          "key": "talk:ranger",
+          "target": 1,
+          "label": "Talk to Rowan Bramble"
+        },
+        {
+          "key": "gather:wood",
+          "target": 40,
+          "label": "Gather timber"
+        }
+      ],
+      "reward": {
+        "coins": 45,
+        "xp": 65
+      }
+    },
+    {
+      "id": "ranger-outpost",
+      "act": 2,
+      "title": "The Shed Must Go On",
+      "short": "Build Rowan's outpost",
+      "detail": "Build a ranger's shed and a well so the forest patrol has supplies and fewer excuses.",
+      "quote": "A proper outpost needs water, storage, and one drawer nobody opens.",
+      "npc": "ranger",
+      "objectives": [
+        {
+          "key": "build:shed",
+          "target": 1,
+          "label": "Build a ranger's shed"
+        },
+        {
+          "key": "build:well",
+          "target": 1,
+          "label": "Build a stone well"
+        }
+      ],
+      "reward": {
+        "coins": 60,
+        "xp": 85
+      }
+    },
+    {
+      "id": "field-and-fiber",
+      "act": 2,
+      "title": "Grain Expectations",
+      "short": "Meet Bunty and start the wheat crop",
+      "detail": "Meet Bunty Butterworth, harvest wheat, and weave linen for the settlement's awnings.",
+      "quote": "A village without a bakery is merely a collection of hungry houses.",
+      "npc": "baker",
+      "objectives": [
+        {
+          "key": "talk:baker",
+          "target": 1,
+          "label": "Talk to Bunty Butterworth"
+        },
+        {
+          "key": "harvest:wheat",
+          "target": 24,
+          "label": "Harvest wheat"
+        },
+        {
+          "key": "craft:cloth",
+          "target": 4,
+          "label": "Weave linen"
+        }
+      ],
+      "reward": {
+        "coins": 70,
+        "xp": 100
+      }
+    },
+    {
+      "id": "forest-stew",
+      "act": 2,
+      "title": "Stew Much Information",
+      "short": "Cook forest stew",
+      "detail": "Forage mushrooms around Rowan's shed and cook three pots of forest stew.",
+      "quote": "Earthy, hearty, and legally distinguishable from a puddle.",
+      "npc": "ranger",
+      "objectives": [
+        {
+          "key": "gather:mushroom",
+          "target": 9,
+          "label": "Gather mushrooms"
+        },
+        {
+          "key": "craft:stew",
+          "target": 3,
+          "label": "Cook forest stew"
+        }
+      ],
+      "reward": {
+        "coins": 65,
+        "xp": 90
+      }
+    },
+    {
+      "id": "coppercrag-survey",
+      "act": 2,
+      "title": "Between a Rock and a Useful Place",
+      "short": "Meet Ember at the quarry",
+      "detail": "Explore Coppercrag Quarry, meet Ember Flint, and gather clay for the new works.",
+      "quote": "Every boulder contains potential. Also more boulder.",
+      "npc": "smith",
+      "objectives": [
+        {
+          "key": "visit:quarry",
+          "target": 1,
+          "label": "Visit Coppercrag Quarry"
+        },
+        {
+          "key": "talk:smith",
+          "target": 1,
+          "label": "Talk to Ember Flint"
+        },
+        {
+          "key": "gather:clay",
+          "target": 60,
+          "label": "Gather clay"
+        }
+      ],
+      "reward": {
+        "coins": 85,
+        "xp": 115
+      }
+    },
+    {
+      "id": "kiln-and-bricks",
+      "act": 2,
+      "title": "Getting Fired Up",
+      "short": "Build a kiln and fire bricks",
+      "detail": "Build a potter's kiln and fire thirty bricks for the settlement's workshops.",
+      "quote": "A kiln is an oven with ambition and fewer biscuits.",
+      "npc": "smith",
+      "objectives": [
+        {
+          "key": "build:kiln",
+          "target": 1,
+          "label": "Build a potter's kiln"
+        },
+        {
+          "key": "craft:brick",
+          "target": 30,
+          "label": "Fire bricks"
+        }
+      ],
+      "reward": {
+        "coins": 105,
+        "xp": 145
+      }
+    },
+    {
+      "id": "forge-ahead",
+      "act": 3,
+      "title": "Forge Ahead",
+      "short": "Build Ember's forge",
+      "detail": "Use the first brickworks to build a copper forge at the quarry.",
+      "quote": "Strike while the iron is hot. If it complains, wear thicker gloves.",
+      "npc": "smith",
+      "objectives": [
+        {
+          "key": "build:forge",
+          "target": 1,
+          "label": "Build a copper forge"
+        }
+      ],
+      "reward": {
+        "coins": 105,
+        "xp": 145
+      }
+    },
+    {
+      "id": "metal-ingots",
+      "act": 3,
+      "title": "Heavy Metal",
+      "short": "Forge metal ingots",
+      "detail": "Gather ore and forge fourteen sturdy ingots for the machines ahead.",
+      "quote": "I call this song Hammer in D Minor. The anvil calls it Tuesday.",
+      "npc": "smith",
+      "objectives": [
+        {
+          "key": "gather:ore",
+          "target": 42,
+          "label": "Gather copper ore"
+        },
+        {
+          "key": "craft:iron",
+          "target": 14,
+          "label": "Forge metal ingots"
+        }
+      ],
+      "reward": {
+        "coins": 115,
+        "xp": 155
+      }
+    },
+    {
+      "id": "tumbledown-orchard",
+      "act": 3,
+      "title": "Core Values",
+      "short": "Meet Petal in the orchard",
+      "detail": "Visit Tumbledown Orchard, meet Professor Petal, and gather apples for preserving.",
+      "quote": "One bad apple is a proverb. Seventy-two good apples are inventory.",
+      "npc": "botanist",
+      "objectives": [
+        {
+          "key": "visit:orchard",
+          "target": 1,
+          "label": "Visit Tumbledown Orchard"
+        },
+        {
+          "key": "talk:botanist",
+          "target": 1,
+          "label": "Talk to Professor Petal"
+        },
+        {
+          "key": "gather:apple",
+          "target": 72,
+          "label": "Gather apples"
+        }
+      ],
+      "reward": {
+        "coins": 95,
+        "xp": 130
+      }
+    },
+    {
+      "id": "jam-reserves",
+      "act": 3,
+      "title": "Jam Session",
+      "short": "Cook orchard jam",
+      "detail": "Preserve eighteen jars of orchard jam for market shelves and the eventual festival feast.",
+      "quote": "Summer in a jar, assuming nobody loses the lid.",
+      "npc": "botanist",
+      "objectives": [
+        {
+          "key": "craft:jam",
+          "target": 18,
+          "label": "Cook orchard jam"
+        }
+      ],
+      "reward": {
+        "coins": 110,
+        "xp": 145
+      }
+    },
+    {
+      "id": "market-and-mill",
+      "act": 3,
+      "title": "Commerce in the Wind",
+      "short": "Build the market and windmill",
+      "detail": "Open a village market, then build a windmill where the island breeze can find it.",
+      "quote": "Commerce begins when someone says, 'I made too much jam.'",
+      "npc": "mayor",
+      "objectives": [
+        {
+          "key": "build:market",
+          "target": 1,
+          "label": "Build the village market"
+        },
+        {
+          "key": "build:windmill",
+          "target": 1,
+          "label": "Build a working windmill"
+        }
+      ],
+      "reward": {
+        "coins": 130,
+        "xp": 170
+      }
+    },
+    {
+      "id": "autumn-fields",
+      "act": 3,
+      "title": "Pumpkin to Talk About",
+      "short": "Raise pumpkin and lavender",
+      "detail": "Expand the fields with sixty pumpkins and sixty lavender sprigs for food, bees, glass, and bunting.",
+      "quote": "Orange for appetite. Purple for elegance. Mud for authenticity.",
+      "npc": "botanist",
+      "objectives": [
+        {
+          "key": "harvest:pumpkin",
+          "target": 60,
+          "label": "Harvest pumpkins"
+        },
+        {
+          "key": "harvest:lavender",
+          "target": 60,
+          "label": "Harvest lavender"
+        }
+      ],
+      "reward": {
+        "coins": 135,
+        "xp": 180
+      }
+    },
+    {
+      "id": "flour-power",
+      "act": 4,
+      "title": "Flour Power",
+      "short": "Mill flour",
+      "detail": "Turn the wheat harvest into forty sacks of flour for the island's ambitious pie forecast.",
+      "quote": "The secret ingredient is flour. The other secret ingredient is also flour.",
+      "npc": "baker",
+      "objectives": [
+        {
+          "key": "craft:flour",
+          "target": 40,
+          "label": "Mill flour"
+        }
+      ],
+      "reward": {
+        "coins": 130,
+        "xp": 175
+      }
+    },
+    {
+      "id": "silverfin-introduction",
+      "act": 4,
+      "title": "Reel Introductions",
+      "short": "Meet Captain Minnow",
+      "detail": "Visit Silverfin Marsh, meet Captain Minnow, and catch eighteen fish for future feasts.",
+      "quote": "The fish are clever today. Yesterday too. I am detecting a pattern.",
+      "npc": "fisher",
+      "objectives": [
+        {
+          "key": "visit:marsh",
+          "target": 1,
+          "label": "Visit Silverfin Marsh"
+        },
+        {
+          "key": "talk:fisher",
+          "target": 1,
+          "label": "Talk to Captain Minnow"
+        },
+        {
+          "key": "catch:fish",
+          "target": 18,
+          "label": "Catch silverfin"
+        }
+      ],
+      "reward": {
+        "coins": 120,
+        "xp": 165
+      }
+    },
+    {
+      "id": "coop-and-eggs",
+      "act": 4,
+      "title": "Poultry in Motion",
+      "short": "Build a coop and collect eggs",
+      "detail": "Build a chicken coop, keep it fed, and collect twenty eggs for the bakery.",
+      "quote": "Never count your chickens before breakfast. It makes them nervous.",
+      "npc": "baker",
+      "objectives": [
+        {
+          "key": "build:coop",
+          "target": 1,
+          "label": "Build a chicken coop"
+        },
+        {
+          "key": "produce:egg",
+          "target": 20,
+          "label": "Collect eggs"
+        }
+      ],
+      "reward": {
+        "coins": 135,
+        "xp": 180
+      }
+    },
+    {
+      "id": "build-apiary",
+      "act": 4,
+      "title": "Hive Expectations",
+      "short": "Build an apiary",
+      "detail": "Build an apiary near the lavender fields. Approach calmly and keep the puns tasteful.",
+      "quote": "The bees run a tight operation. Their meetings have excellent buzz.",
+      "npc": "botanist",
+      "objectives": [
+        {
+          "key": "build:beehive",
+          "target": 1,
+          "label": "Build an apiary"
+        }
+      ],
+      "reward": {
+        "coins": 115,
+        "xp": 155
+      }
+    },
+    {
+      "id": "honey-and-glass",
+      "act": 4,
+      "title": "Pane and Gain",
+      "short": "Gather honey and build a greenhouse",
+      "detail": "Collect twenty-six honey, then build the iron-framed greenhouse Professor Petal designed.",
+      "quote": "It is a house for plants. They remain terrible at paying rent.",
+      "npc": "botanist",
+      "objectives": [
+        {
+          "key": "produce:honey",
+          "target": 26,
+          "label": "Collect honey"
+        },
+        {
+          "key": "build:greenhouse",
+          "target": 1,
+          "label": "Build a greenhouse"
+        }
+      ],
+      "reward": {
+        "coins": 150,
+        "xp": 200
+      }
+    },
+    {
+      "id": "repair-bridge",
+      "act": 4,
+      "title": "Bridge Over Mildly Troubled Water",
+      "short": "Repair the highland bridge",
+      "detail": "Use planks, bricks, and ingots to restore the bridge into Starfall Highlands.",
+      "quote": "I volunteer to supervise from this extremely safe side of the river.",
+      "npc": "mayor",
+      "objectives": [
+        {
+          "key": "project:bridge",
+          "target": 1,
+          "label": "Restore the highland bridge"
+        }
+      ],
+      "reward": {
+        "coins": 165,
+        "xp": 220
+      }
+    },
+    {
+      "id": "harvest-pies",
+      "act": 4,
+      "title": "Easy as Pie, Allegedly",
+      "short": "Bake twenty harvest pies",
+      "detail": "Bake twenty harvest pies: twelve for six feasts and eight for the festival table.",
+      "quote": "The first slice is quality control. The second is a second opinion.",
+      "npc": "baker",
+      "objectives": [
+        {
+          "key": "craft:pie",
+          "target": 20,
+          "label": "Bake harvest pies"
+        }
+      ],
+      "reward": {
+        "coins": 170,
+        "xp": 225
+      }
+    },
+    {
+      "id": "starfall-arrival",
+      "act": 5,
+      "title": "A Star Is Bored",
+      "short": "Meet Dr. Puddlewick",
+      "detail": "Cross the repaired bridge, explore Starfall Highlands, and meet astronomer Dr. Puddlewick.",
+      "quote": "The universe is vast, ancient, and surprisingly bad at keeping appointments.",
+      "npc": "astronomer",
+      "objectives": [
+        {
+          "key": "visit:highlands",
+          "target": 1,
+          "label": "Visit Starfall Highlands"
+        },
+        {
+          "key": "talk:astronomer",
+          "target": 1,
+          "label": "Talk to Dr. Puddlewick"
+        }
+      ],
+      "reward": {
+        "coins": 120,
+        "xp": 165
+      }
+    },
+    {
+      "id": "starglass",
+      "act": 5,
+      "title": "Through a Glass Brightly",
+      "short": "Craft eighteen starglass",
+      "detail": "Forge eighteen panes of starglass for the gate, observatory frame, and Starfall Lens.",
+      "quote": "Polish carefully. Fingerprints make the constellations look judgmental.",
+      "npc": "astronomer",
+      "objectives": [
+        {
+          "key": "craft:starglass",
+          "target": 18,
+          "label": "Craft starglass"
+        }
+      ],
+      "reward": {
+        "coins": 180,
+        "xp": 240
+      }
+    },
+    {
+      "id": "four-relics",
+      "act": 5,
+      "title": "Four Relics, No Refunds",
+      "short": "Recover the island relics",
+      "detail": "Recover the four lost relics from the forest, quarry, orchard, and marsh.",
+      "quote": "History belongs in a museum. These belong in four very sturdy pockets.",
+      "npc": "astronomer",
+      "objectives": [
+        {
+          "key": "relics",
+          "target": 4,
+          "label": "Recover island relics"
+        }
+      ],
+      "reward": {
+        "coins": 175,
+        "xp": 235
+      }
+    },
+    {
+      "id": "ancient-gate",
+      "act": 5,
+      "title": "A Very Old Door",
+      "short": "Open the Fourfold Gate",
+      "detail": "Return all four relics and the required starglass and ingots to the ancient gate.",
+      "quote": "The gate predates the town charter, which explains its sensible opening hours.",
+      "npc": "astronomer",
+      "objectives": [
+        {
+          "key": "project:gate",
+          "target": 1,
+          "label": "Open the ancient gate"
+        }
+      ],
+      "reward": {
+        "coins": 190,
+        "xp": 250
+      }
+    },
+    {
+      "id": "build-observatory",
+      "act": 5,
+      "title": "Room with a View",
+      "short": "Build the observatory",
+      "detail": "Build the Starfall Observatory beyond the ancient gate.",
+      "quote": "At last, a proper home for my telescope and emergency cocoa.",
+      "npc": "astronomer",
+      "objectives": [
+        {
+          "key": "build:observatory",
+          "target": 1,
+          "label": "Build the observatory"
+        }
+      ],
+      "reward": {
+        "coins": 185,
+        "xp": 245
+      }
+    },
+    {
+      "id": "restore-observatory",
+      "act": 5,
+      "title": "The Stars Come Home",
+      "short": "Restore the Starfall Lens",
+      "detail": "Complete the observatory's community lens and return the island's night sky to focus.",
+      "quote": "There they are. Billions of stars, all refusing to explain the geese.",
+      "npc": "astronomer",
+      "objectives": [
+        {
+          "key": "project:observatory",
+          "target": 1,
+          "label": "Restore the Starfall Lens"
+        }
+      ],
+      "reward": {
+        "coins": 200,
+        "xp": 270
+      }
+    },
+    {
+      "id": "honking-hearth",
+      "act": 6,
+      "title": "The Honking Hearth",
+      "short": "Build the island tavern",
+      "detail": "Build a tavern where every resident can trade stories, supper, and unreliable directions.",
+      "quote": "A tavern is a town hall with pie and better minutes.",
+      "npc": "mayor",
+      "objectives": [
+        {
+          "key": "build:tavern",
+          "target": 1,
+          "label": "Build The Honking Hearth"
+        }
+      ],
+      "reward": {
+        "coins": 175,
+        "xp": 230
+      }
+    },
+    {
+      "id": "festival-feasts",
+      "act": 6,
+      "title": "Six Courses of Action",
+      "short": "Prepare six festival feasts",
+      "detail": "Use the tavern kitchen to prepare six feasts from pies, fish, jam, and bread.",
+      "quote": "A feast is dinner with witnesses and significantly more pie.",
+      "npc": "baker",
+      "objectives": [
+        {
+          "key": "craft:feast",
+          "target": 6,
+          "label": "Prepare festival feasts"
+        }
+      ],
+      "reward": {
+        "coins": 190,
+        "xp": 250
+      }
+    },
+    {
+      "id": "festival-pavilion",
+      "act": 6,
+      "title": "Raise the Roof",
+      "short": "Build the festival pavilion",
+      "detail": "Build a pavilion beside Bramblewick for music, dancing, and mayoral announcements of uncertain length.",
+      "quote": "A stage big enough for my ego? Ambitious, but proceed.",
+      "npc": "mayor",
+      "objectives": [
+        {
+          "key": "build:festival",
+          "target": 1,
+          "label": "Build the festival pavilion"
+        }
+      ],
+      "reward": {
+        "coins": 200,
+        "xp": 270
+      }
+    },
+    {
+      "id": "dress-the-grounds",
+      "act": 6,
+      "title": "Bunting, Set, Go",
+      "short": "Dress the festival grounds",
+      "detail": "Weave twenty linen and place four lengths of rustic fence to guide the celebratory stampede.",
+      "quote": "Bunting is cloth that has decided to become cheerful.",
+      "npc": "botanist",
+      "objectives": [
+        {
+          "key": "craft:cloth",
+          "target": 20,
+          "label": "Weave linen over your travels"
+        },
+        {
+          "key": "build:fence",
+          "target": 4,
+          "label": "Build rustic fences"
+        }
+      ],
+      "reward": {
+        "coins": 155,
+        "xp": 210
+      }
+    },
+    {
+      "id": "mosslight-festival",
+      "act": 6,
+      "title": "Moss, Mischief, and Moonlight",
+      "short": "Begin the Mosslight Festival",
+      "detail": "Stock the pavilion and begin the celebration that brings every trail, trade, and friend together.",
+      "quote": "By mayoral decree: tonight, even the geese must dance responsibly.",
+      "npc": "mayor",
+      "objectives": [
+        {
+          "key": "project:festival",
+          "target": 1,
+          "label": "Begin the Mosslight Festival"
+        }
+      ],
+      "reward": {
+        "coins": 250,
+        "xp": 350
+      }
+    }
+  ],
+  "contracts": [
+    {
+      "id": "ranger-trail-markers",
+      "title": "Signs of Progress",
+      "npc": "ranger",
+      "description": "Rowan needs trail markers. Apparently 'probably this way' tested poorly.",
+      "cost": {
+        "plank": 4,
+        "fiber": 3
+      },
+      "reward": {
+        "coins": 45,
+        "xp": 30
+      }
+    },
+    {
+      "id": "ranger-camp-supplies",
+      "title": "Camp, Set, Match",
+      "npc": "ranger",
+      "description": "Bundle patrol supplies for Rowan and one suspiciously pampered squirrel.",
+      "cost": {
+        "wood": 12,
+        "stew": 2
+      },
+      "reward": {
+        "coins": 52,
+        "xp": 34
+      }
+    },
+    {
+      "id": "fisher-bait-barter",
+      "title": "Bait Expectations",
+      "npc": "fisher",
+      "description": "Captain Minnow is trading for bait. The fish have formed a tasting committee.",
+      "cost": {
+        "fiber": 8,
+        "mushroom": 4
+      },
+      "reward": {
+        "coins": 42,
+        "xp": 28
+      }
+    },
+    {
+      "id": "fisher-market-catch",
+      "title": "The Daily Catchphrase",
+      "npc": "fisher",
+      "description": "Bring a fresh catch before Minnow invents another fish pun.",
+      "cost": {
+        "fish": 6
+      },
+      "reward": {
+        "coins": 58,
+        "xp": 38
+      }
+    },
+    {
+      "id": "smith-quarry-order",
+      "title": "Ore Else",
+      "npc": "smith",
+      "description": "Ember needs quarry materials and an impractical amount of confidence.",
+      "cost": {
+        "stone": 10,
+        "ore": 6
+      },
+      "reward": {
+        "coins": 62,
+        "xp": 40
+      }
+    },
+    {
+      "id": "smith-brick-batch",
+      "title": "Another Brick Request",
+      "npc": "smith",
+      "description": "Supply bricks for repairs nobody remembers approving.",
+      "cost": {
+        "brick": 5
+      },
+      "reward": {
+        "coins": 65,
+        "xp": 42
+      }
+    },
+    {
+      "id": "botanist-seed-library",
+      "title": "Overdue Blooms",
+      "npc": "botanist",
+      "description": "Professor Petal's seed library accepts returns and sincere apologies.",
+      "cost": {
+        "seed": 10,
+        "lavender": 5
+      },
+      "reward": {
+        "coins": 44,
+        "xp": 34
+      }
+    },
+    {
+      "id": "botanist-greenhouse-tonic",
+      "title": "A Tonic Relationship",
+      "npc": "botanist",
+      "description": "Mix supplies for plants described as droopy but brave.",
+      "cost": {
+        "mushroom": 5,
+        "honey": 3
+      },
+      "reward": {
+        "coins": 56,
+        "xp": 39
+      }
+    },
+    {
+      "id": "baker-breakfast-basket",
+      "title": "The Yolk's on Bunty",
+      "npc": "baker",
+      "description": "Fill a breakfast basket before Mayor Honk declares crackers a meal.",
+      "cost": {
+        "egg": 6,
+        "bread": 3,
+        "honey": 2
+      },
+      "reward": {
+        "coins": 68,
+        "xp": 44
+      }
+    },
+    {
+      "id": "baker-pie-counter",
+      "title": "Piece Offering",
+      "npc": "baker",
+      "description": "Restock the pie counter. Bunty counted the empty plates as evidence.",
+      "cost": {
+        "pie": 3,
+        "jam": 2
+      },
+      "reward": {
+        "coins": 72,
+        "xp": 48
+      }
+    },
+    {
+      "id": "astronomer-lens-cloth",
+      "title": "A Clear Night's Work",
+      "npc": "astronomer",
+      "description": "Puddlewick needs linen and starglass for a telescope that sees everything except dust.",
+      "cost": {
+        "cloth": 4,
+        "starglass": 1
+      },
+      "reward": {
+        "coins": 76,
+        "xp": 52
+      }
+    },
+    {
+      "id": "mayor-leftover-inspection",
+      "title": "Official Leftover Inspection",
+      "npc": "mayor",
+      "description": "The mayor requires a modest civic snack for administrative purposes.",
+      "cost": {
+        "flour": 3,
+        "egg": 4,
+        "apple": 5
+      },
+      "reward": {
+        "coins": 60,
+        "xp": 40
+      }
+    }
+  ]
+}
