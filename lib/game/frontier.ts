@@ -102,6 +102,33 @@ export function eatFood(s: GameState, food: Resource) {
 export function canteenCapacity(s: GameState) {
   return 3 + (s.frontier.gear.canteen - 1) * 2;
 }
+/** Prefer useful nutrition over wasting a large meal on a tiny deficit. */
+export function quickFood(s: GameState): Resource | null {
+  const n = s.frontier.needs;
+  let choice: Resource | null = null,
+    best = 0;
+  for (const food of Object.keys(FOOD) as Resource[]) {
+    if (s.inventory[food] < 1) continue;
+    const f = FOOD[food]!,
+      hunger =
+        f.hunger * (1 + Math.max(0, stationLevel(s, 'tavern') - 1) * 0.1);
+    const thirstWeight = n.thirst < 25 ? 2 : 1;
+    const benefit =
+      Math.min(100 - n.hunger, hunger) +
+      Math.min(100 - n.thirst, f.thirst) * thirstWeight +
+      Math.min(100 - n.health, f.health) * 0.5;
+    const waste =
+      Math.max(0, hunger - (100 - n.hunger)) +
+      Math.max(0, f.thirst - (100 - n.thirst)) +
+      Math.max(0, f.health - (100 - n.health)) * 0.5;
+    const score = benefit > 0 ? benefit / (1 + waste * 0.08) : benefit;
+    if (score > best) {
+      best = score;
+      choice = food;
+    }
+  }
+  return choice;
+}
 export function drinkWater(s: GameState, refill = false) {
   const n = s.frontier.needs;
   if (refill) {
@@ -454,6 +481,12 @@ export function expedition(s: GameState, id: string) {
     started: s.frontier.needs.activeTime,
   };
   return `${job.name} accepted. Only new activity counts. The clipboard is watching.`;
+}
+export function abandonExpedition(s: GameState) {
+  if (!s.frontier.expedition)
+    return 'No expedition to abandon. The clipboard is enjoying its day off.';
+  s.frontier.expedition = null;
+  return 'Expedition abandoned. No reward claimed; your supplies are safe. The clipboard forgives you.';
 }
 export function parseFrontier(
   value: unknown,

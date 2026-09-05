@@ -329,6 +329,17 @@ export function farm(s: GameState, id: string, now = Date.now()) {
   }
   return `${CROPS[p.crop].name}: ${Math.ceil(((1 - growth(p, now)) * CROPS[p.crop].time * (p.boosted ? 0.65 : 1)) / 1000)}s until harvest.`;
 }
+export function craftOutput(s: GameState, type: Craftable, amount = 1) {
+  const r = RECIPES[type];
+  return (
+    amount *
+    (r.station &&
+    (stationLevel(s, r.station) >= 3 ||
+      (r.station === 'kiln' && stationLevel(s, 'kiln') >= 2))
+      ? 2
+      : 1)
+  );
+}
 export function craft(s: GameState, type: Craftable, amount = 1) {
   if (!Number.isInteger(amount) || amount < 1 || amount > 20)
     return 'Craft between 1 and 20 at a time.';
@@ -345,13 +356,7 @@ export function craft(s: GameState, type: Craftable, amount = 1) {
     Object.entries(r.cost).map(([k, v]) => [k, v! * amount]),
   );
   if (!pay(s, cost)) return 'Not enough ingredients for that batch.';
-  const output =
-    amount *
-    (r.station &&
-    (stationLevel(s, r.station) >= 3 ||
-      (r.station === 'kiln' && stationLevel(s, 'kiln') >= 2))
-      ? 2
-      : 1);
+  const output = craftOutput(s, type, amount);
   s.inventory[type] += output;
   addCount(s, `craft:${type}`, output);
   if (type === 'bread') s.stats.crafted += amount;

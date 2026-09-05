@@ -29,6 +29,9 @@ type Member = {
   last_hurt: number;
   last_action: string | null;
   last_result: string | null;
+  fishing: string;
+  lock_id: string | null;
+  lock_until: number;
 };
 const cookieName = 'bramblewick_camp';
 const reply = (body: unknown, status = 200, cookie?: string) =>
@@ -64,6 +67,7 @@ function pose(value: unknown) {
     : null;
 }
 export async function POST(request: Request) {
+  let lease: { db: D1DatabaseSession; token: string; id: string } | undefined;
   try {
     const origin = request.headers.get('origin');
     if (origin && origin !== new URL(request.url).origin)
@@ -148,22 +152,28 @@ export async function POST(request: Request) {
         const secret = random(32),
           memberToken = await hash(secret),
           id = crypto.randomUUID();
-        const inserted = await db
-          .prepare(
-            'INSERT INTO campers (token,id,room,name,pose,seen) SELECT ?,?,?,?,?,? WHERE (SELECT COUNT(*) FROM campers WHERE room = ? AND seen > ?) < 4',
-          )
-          .bind(
-            memberToken,
-            id,
-            code,
-            name,
-            JSON.stringify({ ...initialState().player, yaw: 0 }),
-            now,
-            code,
-            now - 15000,
-          )
-          .run();
-        if (!inserted.meta.changes)
+        const inserted = await db.batch([
+          db
+            .prepare(
+              'INSERT INTO campers (token,id,room,name,pose,seen) SELECT ?,?,?,?,?,? WHERE (SELECT COUNT(*) FROM campers WHERE room = ? AND seen > ?) < 4',
+            )
+            .bind(
+              memberToken,
+              id,
+              code,
+              name,
+              JSON.stringify({ ...initialState().player, yaw: 0 }),
+              now,
+              code,
+              now - 15000,
+            ),
+          db
+            .prepare(
+              'DELETE FROM campers WHERE token = ? AND EXISTS (SELECT 1 FROM campers WHERE token = ?)',
+            )
+            .bind(member?.token ?? '', memberToken),
+        ]);
+        if (!inserted[0].meta.changes)
           return reply(
             {
               error:
@@ -178,8 +188,8 @@ export async function POST(request: Request) {
         setCookie = `${cookieName}=${secret}; Path=/api/camp; HttpOnly; SameSite=Strict; Max-Age=2592000${new URL(request.url).protocol === 'https:' ? '; Secure' : ''}`;
       } else
         await db
-          .prepare('UPDATE campers SET name = ?, seen = ? WHERE token = ?')
-          .bind(name, now, member.token)
+          .prepare('UPDATE campers SET name = ? WHERE token = ?')
+          .bind(name, member.token)
           .run();
     }
     if (!member || member.room !== code)
@@ -187,10 +197,30 @@ export async function POST(request: Request) {
         { error: 'Join this camp first. Your solo island is safe.' },
         401,
       );
+    // Serialize personal needs and fishing for this membership; other players
+    // remain independent and compete only on the shared world's revision.
+    const lockId = crypto.randomUUID();
+    const locked = await db
+      .prepare(
+        'UPDATE campers SET lock_id = ?, lock_until = ? WHERE token = ? AND lock_until <= ?',
+      )
+      .bind(lockId, now + 30000, member.token, now)
+      .run();
+    if (!locked.meta.changes)
+      return reply(
+        { error: 'Your previous camp action is finishing. Try again shortly.' },
+        429,
+      );
+    lease = { db, token: member.token, id: lockId };
+    member = await db
+      .prepare('SELECT * FROM campers WHERE token = ?')
+      .bind(member.token)
+      .first<Member>();
+    if (!member) return reply({ error: 'Join this camp first.' }, 401);
     if (input.op === 'leave') {
       await db
-        .prepare('DELETE FROM campers WHERE token = ?')
-        .bind(member.token)
+        .prepare('DELETE FROM campers WHERE token = ? AND lock_id = ?')
+        .bind(member.token, lockId)
         .run();
       return reply(
         { code, id: member.id, revision: 0, peers: [] },
@@ -251,7 +281,7 @@ export async function POST(request: Request) {
     // Expired clients may resume only when a slot remains available.
     const presence = await db
       .prepare(
-        'UPDATE campers SET pose = ?, seen = ?, needs = ?, last_hurt = ? WHERE token = ? AND (seen > ? OR (SELECT COUNT(*) FROM campers WHERE room = ? AND seen > ?) < 4)',
+        'UPDATE campers SET pose = ?, seen = ?, needs = ?, last_hurt = ? WHERE token = ? AND lock_id = ? AND (seen > ? OR (SELECT COUNT(*) FROM campers WHERE room = ? AND seen > ?) < 4)',
       )
       .bind(
         JSON.stringify(position),
@@ -259,6 +289,7 @@ export async function POST(request: Request) {
         JSON.stringify(personal),
         member.last_hurt,
         member.token,
+        lockId,
         now - 15000,
         code,
         now - 15000,
@@ -280,23 +311,29 @@ export async function POST(request: Request) {
         !/^[a-f0-9-]{36}$/.test(input.requestId)
       )
         return reply({ error: 'Invalid camp action.' }, 400);
-      if (member.last_action === input.requestId && member.last_result)
+      const commandKey = JSON.stringify({
+        command: input.command,
+        tool: input.tool,
+        crop: input.crop,
+      });
+      const receipt = await db
+        .prepare(
+          'SELECT command,result FROM camp_actions WHERE token = ? AND request_id = ?',
+        )
+        .bind(member.token, input.requestId)
+        .first<{ command: string; result: string }>();
+      if (receipt && receipt.command !== commandKey)
+        return reply(
+          { error: 'That action receipt belongs to a different command.' },
+          409,
+        );
+      if (receipt) ({ message, changed } = JSON.parse(receipt.result));
+      // Keep the last pre-migration action safe for clients already in flight.
+      else if (member.last_action === input.requestId && member.last_result)
         ({ message, changed } = JSON.parse(member.last_result));
       else {
         let applied = false;
         for (let attempt = 0; attempt < 5; attempt++) {
-          // Check again after a competing request finishes, including retries of the same action.
-          const receipt = await db
-            .prepare(
-              'SELECT last_action,last_result FROM campers WHERE token = ?',
-            )
-            .bind(member.token)
-            .first<Member>();
-          if (receipt?.last_action === input.requestId && receipt.last_result) {
-            ({ message, changed } = JSON.parse(receipt.last_result));
-            applied = true;
-            break;
-          }
           const camp = await db
             .prepare('SELECT * FROM camps WHERE code = ?')
             .bind(code)
@@ -307,6 +344,7 @@ export async function POST(request: Request) {
           state.tool = input.tool as GameState['tool'];
           state.crop = input.crop as GameState['crop'];
           state.frontier.needs = structuredClone(personal);
+          state.fishing = JSON.parse(member.fishing);
           const before = JSON.stringify(state);
           message = applyCommand(state, input.command, now);
           changed = before !== JSON.stringify(state);
@@ -316,29 +354,50 @@ export async function POST(request: Request) {
             Math.floor(personal.activeTime / 600),
           );
           updateQuests(state);
+          const fishing = JSON.stringify(state.fishing);
+          state.fishing = null;
+          const resultJson = JSON.stringify({ message, changed });
           const result = await db.batch([
             db
               .prepare(
-                'UPDATE camps SET state = ?, revision = revision + 1, mutation = ?, updated = ? WHERE code = ? AND revision = ?',
+                'UPDATE camps SET state = ?, revision = revision + 1, mutation = ?, updated = ? WHERE code = ? AND revision = ? AND EXISTS (SELECT 1 FROM campers WHERE token = ? AND lock_id = ?)',
               )
               .bind(
                 JSON.stringify(state),
-                input.requestId,
+                lockId,
                 now,
                 code,
                 camp.revision,
+                member.token,
+                lockId,
               ),
             db
               .prepare(
-                'UPDATE campers SET last_action = ?, last_result = ?, needs = ? WHERE token = ? AND EXISTS (SELECT 1 FROM camps WHERE code = ? AND mutation = ?)',
+                'UPDATE campers SET last_action = ?, last_result = ?, needs = ?, fishing = ? WHERE token = ? AND lock_id = ? AND EXISTS (SELECT 1 FROM camps WHERE code = ? AND mutation = ?)',
               )
               .bind(
                 input.requestId,
-                JSON.stringify({ message, changed }),
+                resultJson,
                 JSON.stringify(state.frontier.needs),
+                fishing,
                 member.token,
+                lockId,
                 code,
+                lockId,
+              ),
+            db
+              .prepare(
+                'INSERT INTO camp_actions (token,request_id,command,result) SELECT ?,?,?,? WHERE EXISTS (SELECT 1 FROM camps WHERE code = ? AND mutation = ?) AND EXISTS (SELECT 1 FROM campers WHERE token = ? AND lock_id = ?)',
+              )
+              .bind(
+                member.token,
                 input.requestId,
+                commandKey,
+                resultJson,
+                code,
+                lockId,
+                member.token,
+                lockId,
               ),
           ]);
           if (result[0].meta.changes) {
@@ -381,9 +440,16 @@ export async function POST(request: Request) {
         updateQuests(state);
         const updated = await db
           .prepare(
-            'UPDATE camps SET state = ?, revision = revision + 1, updated = ? WHERE code = ? AND revision = ?',
+            'UPDATE camps SET state = ?, revision = revision + 1, updated = ? WHERE code = ? AND revision = ? AND EXISTS (SELECT 1 FROM campers WHERE token = ? AND lock_id = ?)',
           )
-          .bind(JSON.stringify(state), now, code, latest.revision)
+          .bind(
+            JSON.stringify(state),
+            now,
+            code,
+            latest.revision,
+            member.token,
+            lockId,
+          )
           .run();
         if (updated.meta.changes) break;
       }
@@ -394,9 +460,9 @@ export async function POST(request: Request) {
       .first<Camp>();
     if (!camp) return reply({ error: 'Camp unavailable.' }, 404);
     const savedPersonal = await db
-      .prepare('SELECT needs FROM campers WHERE token = ?')
+      .prepare('SELECT needs,fishing FROM campers WHERE token = ?')
       .bind(member.token)
-      .first<{ needs: string }>();
+      .first<{ needs: string; fishing: string }>();
     const players = await db
       .prepare(
         'SELECT id,name,pose FROM campers WHERE room = ? AND seen > ? ORDER BY id LIMIT 4',
@@ -412,6 +478,7 @@ export async function POST(request: Request) {
           ? JSON.parse(savedPersonal.needs)
           : personal,
         rescued,
+        fishing: savedPersonal ? JSON.parse(savedPersonal.fishing) : null,
         position,
         peers: players.results.map((p) => ({
           id: p.id,
@@ -439,5 +506,18 @@ export async function POST(request: Request) {
       },
       error instanceof SyntaxError ? 400 : 503,
     );
+  } finally {
+    if (lease) {
+      try {
+        await lease.db
+          .prepare(
+            'UPDATE campers SET lock_id = NULL, lock_until = 0 WHERE token = ? AND lock_id = ?',
+          )
+          .bind(lease.token, lease.id)
+          .run();
+      } catch {
+        console.warn('Camp membership lease will expire automatically.');
+      }
+    }
   }
 }

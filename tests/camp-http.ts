@@ -133,16 +133,47 @@ assert.equal(
   'concurrent crafting preserves both outputs',
 );
 const craftId = crypto.randomUUID();
+// Client IDs are only unique within a membership; two players may reuse one.
+const sharedRequestId = crypto.randomUUID();
+await Promise.all([
+  a.action({ type: 'craft', recipe: 'plank', amount: 1 }, sharedRequestId),
+  b.action({ type: 'craft', recipe: 'plank', amount: 1 }, sharedRequestId),
+]);
+await a.call({ op: 'poll', revision: -1 });
+assert.equal(
+  a.state.inventory.plank,
+  7,
+  'two members may safely use the same client request ID',
+);
 await a.action({ type: 'craft', recipe: 'plank', amount: 1 }, craftId);
+await a.action({ type: 'craft', recipe: 'plank', amount: 1 });
 await a.action({ type: 'craft', recipe: 'plank', amount: 1 }, craftId);
-assert.equal(a.state.inventory.plank, 6, 'paid craft retries apply once');
+assert.equal(
+  a.state.inventory.plank,
+  9,
+  'older paid craft retries apply once after a newer action',
+);
+await a.call(
+  {
+    op: 'action',
+    requestId: craftId,
+    command: { type: 'craft', recipe: 'plank', amount: 2 },
+    tool: 'axe',
+    crop: 'carrot',
+  },
+  409,
+);
 const previous = a.state.inventory.plank;
-await a
-  .action({ type: 'craft', recipe: 'plank', amount: 1000 }, crypto.randomUUID())
-  .then(
-    () => assert.fail('invalid batch accepted'),
-    () => {},
-  );
+await a.call(
+  {
+    op: 'action',
+    requestId: crypto.randomUUID(),
+    command: { type: 'craft', recipe: 'plank', amount: 1000 },
+    tool: 'axe',
+    crop: 'carrot',
+  },
+  400,
+);
 await a.call({ op: 'poll', revision: -1 });
 assert.equal(a.state.inventory.plank, previous);
 await e.call({ op: 'poll', code: a.code }, 401);
@@ -186,6 +217,94 @@ await e.call({ op: 'join', code: a.code, name: 'HTTP Return' });
 assert.equal(e.state.buildings.length, 2, 'camp survives everyone leaving');
 assert.equal(e.state.inventory.plank, previous);
 await e.call({ op: 'leave' });
+// Each explorer owns a line while catches and bait still use the shared pantry.
+const fishingSeed = initialState();
+fishingSeed.started = true;
+fishingSeed.counters['talk:fisher'] = 1;
+await a.call({ op: 'create', name: 'HTTP Angler A', state: fishingSeed });
+await b.call({ op: 'join', code: a.code, name: 'HTTP Angler B' });
+const fishingPose = { x: 31.5, z: 27.5, yaw: 0 };
+for (let step = 1; step <= 18; step++) {
+  const pose = {
+    x: (fishingPose.x * step) / 18,
+    z: 7 + ((fishingPose.z - 7) * step) / 18,
+    yaw: 0,
+  };
+  await Promise.all([
+    a.call({ op: 'poll', pose }),
+    b.call({ op: 'poll', pose }),
+  ]);
+}
+const cast = (player: Explorer, id: string) => {
+  const target = targets.targets.find((t) => t.id === id)!;
+  return player.call({
+    op: 'action',
+    requestId: crypto.randomUUID(),
+    command: { type: 'interact', id, kind: 'fish', x: target.x, z: target.z },
+    tool: 'rod',
+    crop: 'carrot',
+    pose: fishingPose,
+  });
+};
+const lineA = await cast(a, 'fish-0');
+assert.equal(lineA.fishing?.id, 'fish-0');
+assert.equal(
+  (await b.call({ op: 'poll', revision: -1 })).fishing,
+  null,
+  'other player does not inherit a line',
+);
+const lineB = await cast(b, 'fish-1');
+assert.equal(lineB.fishing?.id, 'fish-1');
+assert.deepEqual(
+  (await a.call({ op: 'poll', revision: -1 })).fishing,
+  lineA.fishing,
+  'another cast cannot cancel your line',
+);
+assert.equal(
+  a.state.fishing,
+  null,
+  'shared world never contains personal fishing',
+);
+await new Promise((resolve) => setTimeout(resolve, 2800));
+assert.match((await cast(a, 'fish-0')).message ?? '', /silverfin/);
+assert.deepEqual(
+  (await b.call({ op: 'poll', revision: -1 })).fishing,
+  lineB.fishing,
+  'another catch cannot reel your line',
+);
+assert.match((await cast(b, 'fish-1')).message ?? '', /silverfin/);
+assert.equal(b.state.inventory.fish, 4, 'both catches reach the shared pantry');
+await a.call({ op: 'leave' });
+await b.call({ op: 'leave' });
+
+// Rejected expired reconnects must not steal slots, even for a moment.
+await a.call({ op: 'create', name: 'HTTP Expiring', state: seed });
+for (const [index, player] of [b, c, d].entries())
+  await player.call({ op: 'join', code: a.code, name: `HTTP Keeper ${index}` });
+console.log('Checking expired slot recovery (16 seconds)');
+for (let tick = 0; tick < 4; tick++) {
+  await new Promise((resolve) => setTimeout(resolve, 4100));
+  await Promise.all([b, c, d].map((player) => player.call({ op: 'poll' })));
+}
+await e.call({ op: 'join', code: a.code, name: 'HTTP Replacement' });
+await a.call({ op: 'join', name: 'HTTP Expired return' }, 409);
+assert.equal((await b.call({ op: 'poll' })).peers.length, 4);
+await d.call({ op: 'leave' });
+await a.call({ op: 'join', name: 'HTTP Return after vacancy' });
+assert.equal(
+  (await b.call({ op: 'poll' })).peers.length,
+  4,
+  'a real vacancy can be filled immediately',
+);
+const originalRoom = a.code;
+await b.call({ op: 'create', name: 'HTTP Moved camp', state: seed });
+await d.call({ op: 'join', code: originalRoom, name: 'HTTP New neighbor' });
+assert.equal(
+  (await a.call({ op: 'poll' })).peers.length,
+  4,
+  'switching rooms releases old slot immediately',
+);
+for (const player of [a, b, c, d, e]) await player.call({ op: 'leave' });
 console.log(
-  'PASS: two-player shared harvest, exact retry, concurrent paid builds/crafts, four slots, auth, durable rejoin',
+  'PASS: shared harvest, durable receipts, concurrent paid builds/crafts, personal fishing/canteens, slot expiry/recovery, room switching, auth and durable rejoin',
 );

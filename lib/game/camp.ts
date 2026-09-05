@@ -19,6 +19,7 @@ export type CampUpdate = {
   needs?: GameState['frontier']['needs'];
   rescued?: boolean;
   position?: { x: number; z: number; yaw: number };
+  fishing?: GameState['fishing'];
 };
 /** Room state is shared; camera, options and needs belong to this player. */
 export function mergeCamp(local: GameState, shared: GameState): GameState {
@@ -31,9 +32,20 @@ export function mergeCamp(local: GameState, shared: GameState): GameState {
     quality: local.quality,
     tool: local.tool,
     crop: local.crop,
+    fishing: local.fishing,
     started: true,
     frontier: { ...shared.frontier, needs: local.frontier.needs },
   };
+}
+export class CampRequestError extends Error {
+  constructor(
+    message: string,
+    public retryable: boolean,
+    public status = 0,
+  ) {
+    super(message);
+    this.name = 'CampRequestError';
+  }
 }
 export class CampClient {
   code = '';
@@ -41,16 +53,39 @@ export class CampClient {
   revision = -1;
   private queue: Promise<unknown> = Promise.resolve();
   async request(body: Record<string, unknown>): Promise<CampUpdate> {
-    const response = await fetch('/api/camp', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(12000),
-    });
-    const result = (await response.json()) as CampUpdate & { error?: string };
+    let response: Response;
+    try {
+      response = await fetch('/api/camp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(12000),
+      });
+    } catch {
+      throw new CampRequestError(
+        'The camp radio lost contact. Please try again.',
+        true,
+      );
+    }
+    let result: CampUpdate & { error?: string };
+    const retryable =
+      response.status === 408 ||
+      response.status === 429 ||
+      response.status >= 500;
+    try {
+      result = await response.json();
+    } catch {
+      throw new CampRequestError(
+        'The camp radio received static. Please try again.',
+        retryable || response.ok,
+        response.status,
+      );
+    }
     if (!response.ok)
-      throw new Error(
+      throw new CampRequestError(
         result.error || 'The camp radio is temporarily out of range.',
+        retryable,
+        response.status,
       );
     return result;
   }
@@ -96,15 +131,24 @@ export class CampClient {
       pose: { ...state.player, yaw: state.view.yaw },
     };
     const run = async () => {
-      try {
-        return await this.request(body);
-      } catch (error) {
-        if (
-          error instanceof Error &&
-          /fetch|timeout|network/i.test(error.message)
-        )
-          return this.request(body);
-        throw error;
+      const deadline = Date.now() + 45000;
+      for (let attempt = 0; ; attempt++) {
+        try {
+          return await this.request(body);
+        } catch (error) {
+          if (
+            !(error instanceof CampRequestError) ||
+            !error.retryable ||
+            Date.now() >= deadline ||
+            (error.status !== 429 && attempt >= 2)
+          )
+            throw error;
+          // An uncertain response may still own the server lease. Keep its
+          // request ID while waiting, so recovery cannot purchase twice.
+          await new Promise((resolve) =>
+            setTimeout(resolve, Math.min(2000, 300 * 2 ** attempt)),
+          );
+        }
       }
     };
     const next = this.queue.then(run, run);
@@ -112,7 +156,12 @@ export class CampClient {
     return next;
   }
   async leave() {
-    await this.request({ op: 'leave', code: this.code });
-    this.code = '';
+    const run = async () => {
+      await this.request({ op: 'leave', code: this.code });
+      this.code = '';
+    };
+    const next = this.queue.then(run, run);
+    this.queue = next.catch(() => {});
+    await next;
   }
 }

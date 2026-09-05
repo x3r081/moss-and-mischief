@@ -1,5 +1,6 @@
 'use client';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import type { Waypoint } from '@/lib/game/navigation';
 import { Progress } from '@/components/ui/progress';
 import {
   ArrowUpRight,
@@ -31,7 +32,13 @@ import {
 } from '@/lib/game/state';
 
 export type FrontierAction = {
-  kind: 'upgrade' | 'gear' | 'expedition' | 'eat' | 'drink';
+  kind:
+    | 'upgrade'
+    | 'gear'
+    | 'expedition'
+    | 'eat'
+    | 'drink'
+    | 'abandon-expedition';
   id: string;
 };
 function Price({
@@ -57,9 +64,15 @@ function Price({
 export default function FrontierPanel({
   state,
   act,
+  track,
+  cooperative,
+  now,
 }: {
   state: GameState;
   act: (action: FrontierAction) => void;
+  track: (target: Waypoint) => void;
+  cooperative: boolean;
+  now: number;
 }) {
   const n = state.frontier.needs,
     run = state.frontier.expedition;
@@ -187,6 +200,20 @@ export default function FrontierPanel({
             can pursue one alongside the main story.
           </p>
           <div className="frontier-cards">
+            {run && (
+              <div className="expedition-dismiss">
+                <p>
+                  {cooperative
+                    ? 'This is your whole crew’s shared expedition. Abandoning clears its progress for everyone.'
+                    : 'Changed your plans? Abandon without losing supplies, then choose a fresh expedition.'}
+                </p>
+                <button
+                  onClick={() => act({ kind: 'abandon-expedition', id: '' })}
+                >
+                  Abandon expedition · no reward
+                </button>
+              </div>
+            )}
             {EXPEDITIONS.map((e) => (
               <article
                 key={e.id}
@@ -195,7 +222,9 @@ export default function FrontierPanel({
                 <Compass />
                 <h3>{e.name}</h3>
                 <p>{e.detail}</p>
-                <strong>+{e.coins} acorns · ancient acorn · reputation</strong>
+                <strong>
+                  +{e.coins} acorns · +1 ancient acorn · +35 reputation
+                </strong>
                 {run?.id === e.id && (
                   <>
                     <Progress
@@ -247,6 +276,33 @@ export default function FrontierPanel({
                     ? `Discovered · ${l.x}, ${l.z}`
                     : 'Follow the clue to reveal this place'}
                 </strong>
+                {state.frontier.discoveries.includes(l.id) && (
+                  <>
+                    <small>
+                      {!now
+                        ? 'Checking cache supplies…'
+                        : (state.frontier.treasures[`cache-${l.id}`] ?? 0) > now
+                          ? `Cache refills in ${Math.ceil(((state.frontier.treasures[`cache-${l.id}`] ?? 0) - now) / 1000)}s`
+                          : 'Cache ready to search'}
+                    </small>
+                    <button
+                      disabled={
+                        (state.frontier.treasures[`cache-${l.id}`] ?? 0) > now
+                      }
+                      onClick={() =>
+                        track({
+                          name: `${l.name} · cache`,
+                          x: l.x + 2.3,
+                          z: l.z + 2.2,
+                        })
+                      }
+                    >
+                      {(state.frontier.treasures[`cache-${l.id}`] ?? 0) > now
+                        ? 'Cache restocking'
+                        : 'Guide to cache'}
+                    </button>
+                  </>
+                )}
               </article>
             ))}
           </div>
@@ -256,11 +312,14 @@ export default function FrontierPanel({
             Food {Math.ceil(n.hunger)} · Water {Math.ceil(n.thirst)} · Health{' '}
             {Math.ceil(n.health)}. Hunger and thirst drain while playing, faster
             when sprinting. Empty meters cost health. A rescue brings you home
-            for 5 acorns. Raw meat needs cooking.
+            {cooperative
+              ? 'with the bill covered by group insurance'
+              : 'for 5 acorns'}
+            . Raw meat needs cooking.
           </p>
           <button
             className="frontier-drink"
-            disabled={!n.canteen}
+            disabled={!n.canteen || n.thirst >= 99.5}
             onClick={() => act({ kind: 'drink', id: '' })}
           >
             Drink from canteen · {n.canteen} sips left · G

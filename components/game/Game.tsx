@@ -1,7 +1,8 @@
 'use client';
-import { type Gear } from '@/lib/game/frontier';
+import { quickFood, FOOD, type Gear } from '@/lib/game/frontier';
 import { applyCommand, type GameCommand } from '@/lib/game/commands';
 import { CampClient, mergeCamp, type CampUpdate } from '@/lib/game/camp';
+import { waypointGuide, type Waypoint } from '@/lib/game/navigation';
 import MultiplayerPanel from './MultiplayerPanel';
 import type { FrontierAction } from './FrontierPanel';
 import { interactionSnapshot } from '@/lib/game/interactions';
@@ -17,6 +18,7 @@ import {
   VolumeX,
   Settings2,
   Compass,
+  ArrowUp,
   ArrowUpRight,
   Play,
   Leaf,
@@ -123,6 +125,15 @@ export default function Game() {
   const [camp, setCamp] = useState<CampUpdate | null>(null),
     [campBusy, setCampBusy] = useState(false),
     [campError, setCampError] = useState('');
+  const [waypoint, setWaypoint] = useState<Waypoint | null>(null);
+  const guide = waypoint ? waypointGuide(snapshot, waypoint) : null;
+  const track = (target: Waypoint) => {
+    setWaypoint(target);
+    setPanel('');
+    notify(
+      `Compass set to ${target.name}. The goose refuses to ask for directions.`,
+    );
+  };
   const pending = useRef(0);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const audio = useRef<IslandAudio | null>(null);
@@ -164,6 +175,7 @@ export default function Game() {
       return;
     if (update.state) data.current = mergeCamp(data.current, update.state);
     if (update.needs) data.current.frontier.needs = update.needs;
+    if (update.fishing !== undefined) data.current.fishing = update.fishing;
     if (update.rescued && update.position) {
       data.current.player = { x: update.position.x, z: update.position.z };
       world.current?.relocate();
@@ -254,6 +266,7 @@ export default function Game() {
   };
   const leaveCamp = async () => {
     if (pending.current) return;
+    setCampBusy(true);
     const client = campClient.current;
     campClient.current = null;
     if (solo.current) data.current = solo.current;
@@ -268,6 +281,8 @@ export default function Game() {
       await client?.leave();
     } catch {
       /* Presence expires automatically after 15 seconds. */
+    } finally {
+      setCampBusy(pending.current > 0);
     }
     notify('Back on your solo island. Keep the camp code to rejoin your crew.');
   };
@@ -350,22 +365,15 @@ export default function Game() {
         },
         menu: (name) => {
           if (name === 'quick-eat') {
-            const food = (
-              [
-                'trailration',
-                'roast',
-                'stew',
-                'cookedmeat',
-                'bread',
-                'apple',
-                'berries',
-                'carrot',
-              ] as Resource[]
-            ).find((r) => data.current.inventory[r] > 0);
+            const food = quickFood(data.current);
             if (food) void perform({ type: 'eat', food });
             else
               notify(
-                'No snacks! Forage berries or cook a meal. F eats, G drinks.',
+                Object.keys(FOOD).some(
+                  (r) => data.current.inventory[r as Resource] > 0,
+                )
+                  ? 'No carried food suits your needs right now. Choose a meal manually in Provisions (U).'
+                  : 'No snacks! Forage berries or cook a meal. F eats, G drinks.',
               );
           } else if (name === 'drink') {
             void perform({ type: 'drink' });
@@ -741,6 +749,15 @@ export default function Game() {
               }
               aria-label="Current quest progress"
             />
+            {!snapshot.won && (
+              <button
+                className="quest-guide"
+                onClick={() => track(NPCS[quest.npc as Npc])}
+              >
+                <MapPin size={14} />
+                Find {NPCS[quest.npc as Npc].name}
+              </button>
+            )}
             <div className="quest-bottom">
               <span>
                 {snapshot.won
@@ -751,6 +768,32 @@ export default function Game() {
                 Journal <kbd>J</kbd>
               </button>
             </div>
+            {guide && waypoint && !panel && (
+              <div
+                className="waypoint-hud"
+                aria-label={`Waypoint: ${waypoint.name}`}
+              >
+                <ArrowUp
+                  size={21}
+                  style={{ transform: `rotate(${guide.turn}deg)` }}
+                />
+                <div>
+                  <strong>{guide.target.name}</strong>
+                  <span>
+                    {guide.nearby
+                      ? 'Nearby · look around'
+                      : `${Math.round(guide.distance)}m · follow the arrow`}
+                    {guide.blocked ? ` · on the way to ${waypoint.name}` : ''}
+                  </span>
+                </div>
+                <button
+                  onClick={() => setWaypoint(null)}
+                  aria-label="Clear waypoint"
+                >
+                  ×
+                </button>
+              </div>
+            )}
           </aside>
           <div className="location-label">
             <MapPin size={14} />
@@ -1026,6 +1069,8 @@ export default function Game() {
         </div>
       )}
       <Panels
+        track={track}
+        cooperative={!!camp}
         pack={(id) => {
           void perform({ type: 'pack', id });
         }}

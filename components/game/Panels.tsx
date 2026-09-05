@@ -1,5 +1,6 @@
 'use client';
 import FrontierPanel, { type FrontierAction } from './FrontierPanel';
+import type { Waypoint } from '@/lib/game/navigation';
 import { FOOD, stationLevel } from '@/lib/game/frontier';
 import { useEffect, useState } from 'react';
 import {
@@ -63,6 +64,7 @@ import {
   REGIONS,
   ACT_NAMES,
   count,
+  craftOutput,
   currentQuest,
   canAfford,
   unlocked,
@@ -100,6 +102,8 @@ const buildIcons: Partial<Record<Structure, typeof Hammer>> = {
   observatory: Star,
 };
 type Props = {
+  track: (target: Waypoint) => void;
+  cooperative: boolean;
   panel: string;
   state: GameState;
   close: () => void;
@@ -225,8 +229,12 @@ export default function Panels(props: Props) {
     [batch, setBatch] = useState(1);
   const [now, setNow] = useState(0);
   useEffect(() => {
+    const firstTick = setTimeout(() => setNow(Date.now()), 0);
     const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
+    return () => {
+      clearTimeout(firstTick);
+      clearInterval(id);
+    };
   }, []);
   const q = currentQuest(state),
     quest = QUESTS[q],
@@ -260,7 +268,13 @@ export default function Panels(props: Props) {
             </DialogDescription>
           </div>
           {panel === 'adventure' && (
-            <FrontierPanel state={state} act={props.frontier} />
+            <FrontierPanel
+              state={state}
+              act={props.frontier}
+              track={props.track}
+              cooperative={props.cooperative}
+              now={now}
+            />
           )}
           {panel === 'multiplayer' && props.multiplayer}
           {panel === 'build' && (
@@ -390,7 +404,7 @@ export default function Panels(props: Props) {
                               <Icon size={26} />
                               <div>
                                 <h3>
-                                  {r.name} × {batch}
+                                  {r.name} × {craftOutput(state, type, batch)}
                                 </h3>
                                 <small>
                                   {r.station && RECIPES[r.station].name} Lv{' '}
@@ -413,7 +427,7 @@ export default function Panels(props: Props) {
                                 : !station
                                   ? `Need ${RECIPES[r.station!].name} level ${r.stationLevel ?? 1}`
                                   : canAfford(state, cost)
-                                    ? `Craft ${batch}`
+                                    ? `Craft ${craftOutput(state, type, batch)}${craftOutput(state, type, batch) > batch ? ' · upgrade bonus' : ''}`
                                     : 'More ingredients needed'}
                               <Hammer size={15} />
                             </button>
@@ -538,6 +552,22 @@ export default function Panels(props: Props) {
               </TabsContent>
               <TabsContent value="map">
                 <IslandMap state={state} />
+                <div className="map-shortcuts">
+                  <button
+                    onClick={() =>
+                      props.track({ name: 'Village spring', x: 1, z: 11 })
+                    }
+                  >
+                    Find drinking water
+                  </button>
+                  <button
+                    onClick={() =>
+                      props.track({ name: 'Home camp', x: 0, z: 7 })
+                    }
+                  >
+                    Return to camp
+                  </button>
+                </div>
                 <div className="resident-list">
                   {Object.entries(NPCS).map(([id, n]) => (
                     <div key={id}>
@@ -548,6 +578,12 @@ export default function Panels(props: Props) {
                           {REGIONS[n.region].name} · {n.x}, {n.z}
                         </small>
                       </span>
+                      <button
+                        className="map-track"
+                        onClick={() => props.track(n)}
+                      >
+                        Guide me
+                      </button>
                       {state.counters[`talk:${id}`] ? (
                         <Check size={16} />
                       ) : (
@@ -579,6 +615,12 @@ export default function Panels(props: Props) {
                             : ''}
                         </small>
                         <Costs state={state} cost={PROJECT_COSTS[type]} />
+                        <button
+                          className="map-track"
+                          onClick={() => props.track(r)}
+                        >
+                          Guide to project
+                        </button>
                         <p className="project-status">
                           {state.projects[type]
                             ? 'Restored. Honk approved.'
@@ -747,6 +789,13 @@ export default function Panels(props: Props) {
                 Refill drinking water at the spring or a well; cook hunted meat
                 before eating. Rabbits are easy prey; boars hurt if approached
                 too closely.
+              </p>
+              <h3>Let the compass do the paperwork.</h3>
+              <p>
+                Choose Guide me in the journal map, or track a discovered cache
+                in Field notes. The compass shows distance and direction, and
+                guides you to required crossings first. Quick eating (F) chooses
+                useful food without wasting a feast on a tiny hunger gap.
               </p>
               <h3>Upgrade, explore, and bring a friend.</h3>
               <p>

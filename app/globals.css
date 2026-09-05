@@ -3056,4 +3056,133 @@ kbd {
   }
 }
 
-.coop-panel {display:grid;gap:18px}.coop-label {display:grid;gap:8px;font-size:14px}.coop-label input {width:100%;border:1px solid #78977c;border-radius:10px;padding:12px;background:#f7f7e8;color:#203b2d;font:inherit}.coop-error {background:#ffe1ca;border-radius:10px;padding:12px;color:#6e321e}.coop-panel .muted{font-size:13px;line-height:1.6;opacity:.75}.coop-panel h3 {overflow-wrap:anywhere}
+.coop-panel {
+  display: grid;
+  gap: 18px;
+}
+.coop-label {
+  display: grid;
+  gap: 8px;
+  font-size: 14px;
+}
+.coop-label input {
+  width: 100%;
+  border: 1px solid #78977c;
+  border-radius: 10px;
+  padding: 12px;
+  background: #f7f7e8;
+  color: #203b2d;
+  font: inherit;
+}
+.coop-error {
+  background: #ffe1ca;
+  border-radius: 10px;
+  padding: 12px;
+  color: #6e321e;
+}
+.coop-panel .muted {
+  font-size: 13px;
+  line-height: 1.6;
+  opacity: 0.75;
+}
+.coop-panel h3 {
+  overflow-wrap: anywhere;
+}
+
+.waypoint-hud {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin-top: 12px;
+  padding-top: 12px;
+  color: #fff4cd;
+  border-top: 1px solid #e4cf8159;
+  pointer-events: none;
+}
+.waypoint-hud > svg {
+  flex-shrink: 0;
+  color: #f7d477;
+}
+.waypoint-hud strong {
+  display: block;
+  font-size: 14px;
+}
+.waypoint-hud span {
+  display: block;
+  font-size: 12px;
+  opacity: 0.8;
+  margin-top: 3px;
+}
+.waypoint-hud button {
+  pointer-events: auto;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font-size: 24px;
+  padding: 0 3px;
+}
+.mouse-captured .waypoint-hud button {
+  pointer-events: none;
+}
+.quest-guide,
+.map-track,
+.map-shortcuts button,
+.expedition-dismiss button {
+  border: 1px solid #738d68;
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #e7edcd;
+  color: #224236;
+  font-size: 14px;
+  cursor: pointer;
+}
+.quest-guide {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 10px 0;
+}
+.map-shortcuts {
+  display: flex;
+  gap: 12px;
+  margin: 12px 0;
+}
+.map-track {
+  margin: 8px 0;
+}
+.expedition-dismiss {
+  grid-column: 1/-1;
+  padding: 12px;
+  background: #fff6db;
+  border-radius: 12px;
+  font-size: 14px;
+}
+.frontier-cards article > small {
+  display: block;
+  margin: 8px 0;
+}
+.waypoint-hud button:focus-visible,
+.quest-guide:focus-visible,
+.map-track:focus-visible {
+  outline: 3px solid #e9b849;
+  outline-offset: 3px;
+}
+@media (max-width: 700px) {
+  .waypoint-hud {
+    gap: 6px;
+  }
+  .waypoint-hud strong {
+    font-size: 12px;
+  }
+  .waypoint-hud span {
+    font-size: 12px;
+  }
+  .quest-guide {
+    font-size: 12px;
+    padding: 5px;
+  }
+  .map-shortcuts {
+    flex-wrap: wrap;
+  }
+}

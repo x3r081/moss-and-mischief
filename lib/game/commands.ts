@@ -32,6 +32,7 @@ import {
   eatFood,
   drinkWater,
   expedition,
+  abandonExpedition,
   huntAnimal,
   discoverLandmark,
   openTreasure,
@@ -104,7 +105,7 @@ export type GameCommand =
   | { type: 'pack' | 'contract' | 'upgrade' | 'expedition'; id: string }
   | { type: 'gear'; gear: Gear }
   | { type: 'eat'; food: Resource }
-  | { type: 'drink' | 'rescue' }
+  | { type: 'drink' | 'rescue' | 'abandon-expedition' }
   | { type: 'trade'; resource: Resource; sell: boolean };
 
 export function validCommand(value: unknown): value is GameCommand {
@@ -156,6 +157,7 @@ export function validCommand(value: unknown): value is GameCommand {
       );
     case 'drink':
     case 'rescue':
+    case 'abandon-expedition':
       return true;
     case 'trade':
       return (
@@ -189,6 +191,8 @@ export function applyCommand(s: GameState, c: GameCommand, now = Date.now()) {
       return drinkWater(s);
     case 'expedition':
       return expedition(s, c.id);
+    case 'abandon-expedition':
+      return abandonExpedition(s);
     case 'rescue':
       s.inventory.coins = Math.max(0, s.inventory.coins - 5);
       return 'The goose ambulance has submitted its invoice.';
